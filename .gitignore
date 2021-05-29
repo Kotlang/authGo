@@ -1,0 +1,5 @@
+build
+.idea
+generated
+vendor
+.env

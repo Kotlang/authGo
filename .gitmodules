@@ -1,0 +1,3 @@
+[submodule "auth-model"]
+	path = auth-model
+	url = git@github.com:Kotlang/auth-model.git
