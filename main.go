@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Kotlang/authGo/auth"
 	pb "github.com/Kotlang/authGo/generated"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	grpc_zap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -33,7 +35,7 @@ func StartGrpcServer() *grpc.Server {
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
 			grpc_ctxtags.UnaryServerInterceptor(grpc_ctxtags.WithFieldExtractor(grpc_ctxtags.CodeGenRequestFieldExtractor)),
 			grpc_zap.UnaryServerInterceptor(logger.Get()),
-			// grpc_auth.UnaryServerInterceptor(auth.VerifyToken()),
+			grpc_auth.UnaryServerInterceptor(auth.VerifyToken()),
 		)),
 	)
 	inject := NewInject()

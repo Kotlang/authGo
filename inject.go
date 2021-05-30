@@ -12,7 +12,8 @@ import (
 type Inject struct {
 	AuthDb *db.AuthDb
 
-	TenantDto *db.TenantDto
+	TenantDto *db.TenantRepository
+	LoginDto *db.LoginRepository
 
 	EmailClient  *otp.EmailClient
 	LoginService *service.LoginService
@@ -20,19 +21,17 @@ type Inject struct {
 
 func NewInject() *Inject {
 	godotenv.Load()
+	inj := &Inject{}
+
 	mongo_uri := os.Getenv("MONGO_URI")
+	inj.AuthDb = db.NewAuthDb(mongo_uri)
 
-	authDb := db.NewAuthDb(mongo_uri)
-	tenantDto := db.NewTenantDto(authDb)
+	inj.TenantDto = db.NewTenantRepository(inj.AuthDb)
+	inj.LoginDto = db.NewLoginRepository(inj.AuthDb)
 
-	emailClient := otp.NewEmailClient()
+	inj.EmailClient = otp.NewEmailClient(inj.LoginDto)
 
-	loginService := service.NewLoginService(tenantDto, emailClient)
+	inj.LoginService = service.NewLoginService(inj.TenantDto, inj.EmailClient)
 
-	return &Inject{
-		AuthDb:       authDb,
-		TenantDto:    tenantDto,
-		EmailClient:  emailClient,
-		LoginService: loginService,
-	}
+	return inj
 }
