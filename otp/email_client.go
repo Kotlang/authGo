@@ -41,7 +41,7 @@ func (c *EmailClient) getOrCreateByEmail(tenant, emailId string) *models.LoginMo
 			Email:     emailId,
 			CreatedOn: time.Now().Format("UnixDate"),
 			UserType:  "default",
-			Domain:    tenant,
+			Tenant:    tenant,
 		}
 		_ = <-c.loginDto.Save(loginInfo)
 	}

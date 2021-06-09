@@ -17,7 +17,7 @@ type LoginModel struct {
 	CreatedOn string `bson:"createdOn"`
 
 	//internal field
-	Domain string
+	Tenant string
 }
 
 func (m *LoginModel) Id() string {
@@ -31,7 +31,7 @@ func (m *LoginModel) Id() string {
 
 func (m *LoginModel) Document() bson.M {
 	return bson.M{
-		"_id":       m.IdVal,
+		"_id":       m.Id(),
 		"email":     m.Email,
 		"phone":     m.Phone,
 		"otp":       m.Otp,
@@ -41,5 +41,5 @@ func (m *LoginModel) Document() bson.M {
 }
 
 func (m *LoginModel) Collection() string {
-	return loginCollectionNamePrefix + m.Domain
+	return loginCollectionNamePrefix + m.Tenant
 }

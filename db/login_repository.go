@@ -23,7 +23,7 @@ func (t *LoginRepository) FindOneByEmail(domain string, email string) chan *mode
 	go func() {
 		login := &models.LoginModel{
 			Email:  email,
-			Domain: domain,
+			Tenant: domain,
 		}
 		err := <-t.FindOneById(login)
 

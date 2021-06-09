@@ -7,6 +7,7 @@ import (
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
 	"github.com/Kotlang/authGo/logger"
+	"github.com/Kotlang/authGo/models"
 	"github.com/Kotlang/authGo/otp"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -15,17 +16,20 @@ import (
 
 type LoginService struct {
 	pb.UnimplementedLoginServer
-	tenantDto   *db.TenantRepository
+	tenantRepo  *db.TenantRepository
+	profileRepo *db.ProfileRepository
 	emailClient *otp.EmailClient
 }
 
 func NewLoginService(
-	tenantDto *db.TenantRepository,
+	tenantRepo *db.TenantRepository,
+	profileRepo *db.ProfileRepository,
 	emailClient *otp.EmailClient) *LoginService {
 
 	return &LoginService{
-		tenantDto:   tenantDto,
+		tenantRepo:  tenantRepo,
 		emailClient: emailClient,
+		profileRepo: profileRepo,
 	}
 }
 
@@ -39,7 +43,7 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
 
-	tenantDetails := <-s.tenantDto.FindOneByToken(req.Domain)
+	tenantDetails := <-s.tenantRepo.FindOneByToken(req.Domain)
 	if tenantDetails == nil {
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
 	}
@@ -56,7 +60,7 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
 
-	tenantDetails := <-s.tenantDto.FindOneByToken(req.Domain)
+	tenantDetails := <-s.tenantRepo.FindOneByToken(req.Domain)
 	if tenantDetails == nil {
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
 	}
@@ -67,10 +71,17 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 			return nil, err
 		}
 
+		profileData := &models.ProfileModel{
+			LoginId: loginInfo.IdVal,
+			Tenant:  tenantDetails.Name,
+		}
+		<-s.profileRepo.FindOneById(profileData)
+
 		jwtToken := auth.GetToken(tenantDetails.Name, loginInfo.IdVal, loginInfo.UserType)
 		return &pb.AuthResponse{
 			Jwt:      jwtToken,
 			UserType: loginInfo.UserType,
+			Profile:  profileData.GetProto(),
 		}, nil
 	}
 

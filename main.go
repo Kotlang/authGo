@@ -25,6 +25,8 @@ var port = ":50051"
 var webPort = ":8081"
 
 func StartGrpcServer() *grpc.Server {
+	inject := NewInject()
+
 	logger.Info("Starting server at", zap.String("port", port))
 	lis, err := net.Listen("tcp", port)
 	if err != nil {
@@ -38,8 +40,8 @@ func StartGrpcServer() *grpc.Server {
 			grpc_auth.UnaryServerInterceptor(auth.VerifyToken()),
 		)),
 	)
-	inject := NewInject()
 	pb.RegisterLoginServer(s, inject.LoginService)
+	pb.RegisterProfileServer(s, inject.ProfileService)
 
 	go func() {
 		if err := s.Serve(lis); err != nil {

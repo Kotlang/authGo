@@ -14,6 +14,9 @@ import (
 
 type Claims string
 
+var USER_ID_CLAIM = Claims("userId")
+var TENANT_CLAIM = Claims("tenantId")
+
 func VerifyToken() grpc_auth.AuthFunc {
 	var ACCESS_SECRET = os.Getenv("ACCESS_SECRET")
 
@@ -33,11 +36,12 @@ func VerifyToken() grpc_auth.AuthFunc {
 		claims, ok := parsedToken.Claims.(*jwt.StandardClaims)
 
 		if !ok || !parsedToken.Valid {
-			logger.Fatal("Failed validating token", zap.Error(err))
+			logger.Error("Failed validating token", zap.Error(err))
 			return nil, status.Errorf(codes.Unauthenticated, "Bad authorization string")
 		}
 
-		newCtx := context.WithValue(ctx, Claims("userId"), claims.Id)
+		newCtx := context.WithValue(ctx, USER_ID_CLAIM, claims.Id)
+		newCtx = context.WithValue(newCtx, TENANT_CLAIM, claims.Audience)
 		return newCtx, nil
 	}
 }
@@ -52,4 +56,10 @@ func GetToken(tenant, userId, userType string) string {
 	at := jwt.NewWithClaims(jwt.SigningMethodHS256, atClaims)
 	token, _ := at.SignedString([]byte(ACCESS_SECRET))
 	return token
+}
+
+func GetUserIdAndTenant(ctx context.Context) (string, string) {
+	userId := ctx.Value(USER_ID_CLAIM).(string)
+	tenant := ctx.Value(TENANT_CLAIM).(string)
+	return userId, tenant
 }
