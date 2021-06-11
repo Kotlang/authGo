@@ -12,10 +12,6 @@ import (
 type Inject struct {
 	AuthDb *db.AuthDb
 
-	TenantRepo  *db.TenantRepository
-	LoginRepo   *db.LoginRepository
-	ProfileRepo *db.ProfileRepository
-
 	EmailClient    *otp.EmailClient
 	LoginService   *service.LoginService
 	ProfileService *service.ProfileService
@@ -28,14 +24,10 @@ func NewInject() *Inject {
 	mongo_uri := os.Getenv("MONGO_URI")
 	inj.AuthDb = db.NewAuthDb(mongo_uri)
 
-	inj.TenantRepo = db.NewTenantRepository(inj.AuthDb)
-	inj.LoginRepo = db.NewLoginRepository(inj.AuthDb)
-	inj.ProfileRepo = db.NewProfileRepository(inj.AuthDb)
+	inj.EmailClient = otp.NewEmailClient(inj.AuthDb)
 
-	inj.EmailClient = otp.NewEmailClient(inj.LoginRepo)
-
-	inj.LoginService = service.NewLoginService(inj.TenantRepo, inj.ProfileRepo, inj.EmailClient)
-	inj.ProfileService = service.NewProfileService(inj.ProfileRepo)
+	inj.LoginService = service.NewLoginService(inj.AuthDb, inj.EmailClient)
+	inj.ProfileService = service.NewProfileService(inj.AuthDb)
 
 	return inj
 }

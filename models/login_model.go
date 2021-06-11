@@ -2,14 +2,11 @@ package models
 
 import (
 	"encoding/base64"
-
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 var loginCollectionNamePrefix string = "login_"
 
 type LoginModel struct {
-	IdVal     string `bson:"_id"`
 	Email     string `bson:"email"`
 	Phone     string `bson:"phone"`
 	Otp       string `bson:"otp"`
@@ -22,21 +19,9 @@ type LoginModel struct {
 
 func (m *LoginModel) Id() string {
 	if len(m.Email) > 0 {
-		m.IdVal = base64.StdEncoding.EncodeToString([]byte(m.Email))
-	} else if len(m.Phone) > 0 {
-		m.IdVal = base64.StdEncoding.EncodeToString([]byte(m.Phone))
-	}
-	return m.IdVal
-}
-
-func (m *LoginModel) Document() bson.M {
-	return bson.M{
-		"_id":       m.Id(),
-		"email":     m.Email,
-		"phone":     m.Phone,
-		"otp":       m.Otp,
-		"userType":  m.UserType,
-		"createdOn": m.CreatedOn,
+		return base64.StdEncoding.EncodeToString([]byte(m.Email))
+	} else {
+		return base64.StdEncoding.EncodeToString([]byte(m.Phone))
 	}
 }
 

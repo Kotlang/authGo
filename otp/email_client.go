@@ -13,12 +13,12 @@ import (
 )
 
 type EmailClient struct {
-	loginDto *db.LoginRepository
+	db *db.AuthDb
 }
 
-func NewEmailClient(loginDto *db.LoginRepository) *EmailClient {
+func NewEmailClient(db *db.AuthDb) *EmailClient {
 	return &EmailClient{
-		loginDto: loginDto,
+		db: db,
 	}
 }
 
@@ -31,11 +31,11 @@ func (c *EmailClient) SendOtp(tenant, emailId string) {
 	loginInfo := c.getOrCreateByEmail(tenant, emailId)
 	logger.Info("Fetched login info is", zap.Any("loginInfo", loginInfo))
 	loginInfo.Otp = "1214"
-	<-c.loginDto.Save(loginInfo)
+	<-c.db.Login.Save(loginInfo)
 }
 
 func (c *EmailClient) getOrCreateByEmail(tenant, emailId string) *models.LoginModel {
-	loginInfo := <-c.loginDto.FindOneByEmail(tenant, emailId)
+	loginInfo := <-c.db.Login.FindOneByEmail(tenant, emailId)
 	if loginInfo == nil {
 		loginInfo = &models.LoginModel{
 			Email:     emailId,
@@ -43,7 +43,7 @@ func (c *EmailClient) getOrCreateByEmail(tenant, emailId string) *models.LoginMo
 			UserType:  "default",
 			Tenant:    tenant,
 		}
-		_ = <-c.loginDto.Save(loginInfo)
+		<-c.db.Login.Save(loginInfo)
 	}
 	return loginInfo
 }

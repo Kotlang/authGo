@@ -9,6 +9,7 @@ import (
 	"github.com/Kotlang/authGo/logger"
 	"github.com/Kotlang/authGo/models"
 	"github.com/Kotlang/authGo/otp"
+	"github.com/jinzhu/copier"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -16,20 +17,17 @@ import (
 
 type LoginService struct {
 	pb.UnimplementedLoginServer
-	tenantRepo  *db.TenantRepository
-	profileRepo *db.ProfileRepository
+	db          *db.AuthDb
 	emailClient *otp.EmailClient
 }
 
 func NewLoginService(
-	tenantRepo *db.TenantRepository,
-	profileRepo *db.ProfileRepository,
+	authDb *db.AuthDb,
 	emailClient *otp.EmailClient) *LoginService {
 
 	return &LoginService{
-		tenantRepo:  tenantRepo,
+		db:          authDb,
 		emailClient: emailClient,
-		profileRepo: profileRepo,
 	}
 }
 
@@ -43,7 +41,7 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
 
-	tenantDetails := <-s.tenantRepo.FindOneByToken(req.Domain)
+	tenantDetails := <-s.db.Tenant.FindOneByToken(req.Domain)
 	if tenantDetails == nil {
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
 	}
@@ -60,30 +58,37 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
 
-	tenantDetails := <-s.tenantRepo.FindOneByToken(req.Domain)
+	tenantDetails := <-s.db.Tenant.FindOneByToken(req.Domain)
 	if tenantDetails == nil {
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
 	}
 
+	var loginInfo *models.LoginModel
+	var err error
 	if s.emailClient.IsValidEmail(req.EmailOrPhone) {
-		loginInfo, err := s.emailClient.ValidateOtpAndGetLoginInfo(tenantDetails.Name, req.EmailOrPhone, req.Otp)
+		loginInfo, err = s.emailClient.ValidateOtpAndGetLoginInfo(tenantDetails.Name, req.EmailOrPhone, req.Otp)
 		if err != nil {
 			return nil, err
 		}
-
-		profileData := &models.ProfileModel{
-			LoginId: loginInfo.IdVal,
-			Tenant:  tenantDetails.Name,
-		}
-		<-s.profileRepo.FindOneById(profileData)
-
-		jwtToken := auth.GetToken(tenantDetails.Name, loginInfo.IdVal, loginInfo.UserType)
-		return &pb.AuthResponse{
-			Jwt:      jwtToken,
-			UserType: loginInfo.UserType,
-			Profile:  profileData.GetProto(),
-		}, nil
 	}
 
-	return &pb.AuthResponse{}, nil
+	profileData := &models.ProfileModel{
+		LoginId: loginInfo.Id(),
+		Tenant:  tenantDetails.Name,
+	}
+	err = <-s.db.Profile.FindOneById(profileData)
+	if err != nil {
+		logger.Error("Failed fetching profile", zap.Error(err))
+	}
+
+	logger.Info("Fetched profile as ", zap.Any("profile", profileData))
+	profileProto := &pb.UserProfileProto{}
+	copier.Copy(profileProto, profileData)
+
+	jwtToken := auth.GetToken(tenantDetails.Name, loginInfo.Id(), loginInfo.UserType)
+	return &pb.AuthResponse{
+		Jwt:      jwtToken,
+		UserType: loginInfo.UserType,
+		Profile:  profileProto,
+	}, nil
 }

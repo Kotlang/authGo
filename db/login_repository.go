@@ -4,6 +4,7 @@ import (
 	"github.com/Kotlang/authGo/logger"
 	"github.com/Kotlang/authGo/models"
 	odm "github.com/SaiNageswarS/mongo-odm"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
 
@@ -11,9 +12,9 @@ type LoginRepository struct {
 	odm.AbstractRepository
 }
 
-func NewLoginRepository(db *AuthDb) *LoginRepository {
+func NewLoginRepository(db *mongo.Database) *LoginRepository {
 	return &LoginRepository{
-		odm.AbstractRepository{db.Db},
+		odm.AbstractRepository{db},
 	}
 }
 

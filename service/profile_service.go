@@ -8,16 +8,17 @@ import (
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
 	"github.com/Kotlang/authGo/models"
+	"github.com/jinzhu/copier"
 )
 
 type ProfileService struct {
 	pb.UnimplementedProfileServer
-	profileRepo *db.ProfileRepository
+	db *db.AuthDb
 }
 
-func NewProfileService(profileRepo *db.ProfileRepository) *ProfileService {
+func NewProfileService(db *db.AuthDb) *ProfileService {
 	return &ProfileService{
-		profileRepo: profileRepo,
+		db: db,
 	}
 }
 
@@ -44,24 +45,21 @@ func getMapFromJson(jsonStr string) map[string]interface{} {
 func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.CreateProfileRequest) (*pb.UserProfileProto, error) {
 	userId, domain := auth.GetUserIdAndTenant(ctx)
 
-	oldProfile := &models.ProfileModel{
-		LoginId: userId,
-		Tenant:  domain,
-	}
-	<-s.profileRepo.FindOneById(oldProfile)
+	oldProfile := &models.ProfileModel{}
+	oldProfile.LoginId = userId
+	oldProfile.Tenant = domain
 
+	<-s.db.Profile.FindOneById(oldProfile)
+
+	// merge old profile and new profile
 	newMetadata := copyAll(oldProfile.MetadataMap, getMapFromJson(req.MetaDataMap))
-	newProfile := &models.ProfileModel{
-		LoginId:           userId,
-		Tenant:            domain,
-		Name:              getNonEmpty(req.Name, oldProfile.Name),
-		PhotoUrl:          getNonEmpty(req.PhotoUrl, oldProfile.PhotoUrl),
-		Gender:            getNonEmpty(req.Gender, oldProfile.Gender),
-		IsVerified:        oldProfile.IsVerified,
-		PreferredLanguage: getNonEmpty(req.PreferredLanguage, oldProfile.PreferredLanguage),
-		MetadataMap:       newMetadata,
-	}
+	copier.CopyWithOption(oldProfile, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
+	oldProfile.MetadataMap = newMetadata
 
-	err := <-s.profileRepo.Save(newProfile)
-	return newProfile.GetProto(), err
+	err := <-s.db.Profile.Save(oldProfile)
+
+	userProfileProto := &pb.UserProfileProto{}
+	copier.Copy(userProfileProto, oldProfile)
+
+	return userProfileProto, err
 }

@@ -2,12 +2,13 @@ package db
 
 import (
 	odm "github.com/SaiNageswarS/mongo-odm"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type ProfileRepository struct {
 	odm.AbstractRepository
 }
 
-func NewProfileRepository(db *AuthDb) *ProfileRepository {
-	return &ProfileRepository{odm.AbstractRepository{db.Db}}
+func NewProfileRepository(db *mongo.Database) *ProfileRepository {
+	return &ProfileRepository{odm.AbstractRepository{db}}
 }

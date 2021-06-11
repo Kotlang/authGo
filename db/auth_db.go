@@ -14,10 +14,12 @@ import (
 var DatabaseName string = "auth"
 
 type AuthDb struct {
-	Db *mongo.Database
+	Login   *LoginRepository
+	Profile *ProfileRepository
+	Tenant  *TenantRepository
 }
 
-func NewAuthDb(mongo_uri string) *AuthDb {
+func getAuthDbReference(mongo_uri string) *mongo.Database {
 	mongoOpts := options.Client().ApplyURI(mongo_uri)
 	mongoOpts.TLSConfig.MinVersion = tls.VersionTLS12
 	mongoOpts.TLSConfig.InsecureSkipVerify = true
@@ -39,12 +41,15 @@ func NewAuthDb(mongo_uri string) *AuthDb {
 	}
 
 	db := client.Database(DatabaseName)
-
-	return &AuthDb{
-		Db: db,
-	}
+	return db
 }
 
-func GetTenantCollectionName(collectionName, tenant string) string {
-	return collectionName + "_" + tenant
+func NewAuthDb(mongo_uri string) *AuthDb {
+	authDbRef := getAuthDbReference(mongo_uri)
+
+	return &AuthDb{
+		Login:   NewLoginRepository(authDbRef),
+		Profile: NewProfileRepository(authDbRef),
+		Tenant:  NewTenantRepository(authDbRef),
+	}
 }

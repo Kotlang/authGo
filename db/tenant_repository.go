@@ -5,6 +5,7 @@ import (
 	"github.com/Kotlang/authGo/models"
 	odm "github.com/SaiNageswarS/mongo-odm"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
 
@@ -12,8 +13,8 @@ type TenantRepository struct {
 	odm.AbstractRepository
 }
 
-func NewTenantRepository(db *AuthDb) *TenantRepository {
-	return &TenantRepository{odm.AbstractRepository{db.Db}}
+func NewTenantRepository(db *mongo.Database) *TenantRepository {
+	return &TenantRepository{odm.AbstractRepository{db}}
 }
 
 func (t *TenantRepository) FindOneByToken(token string) chan *models.TenantModel {
