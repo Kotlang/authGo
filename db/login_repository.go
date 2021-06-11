@@ -4,7 +4,6 @@ import (
 	"github.com/Kotlang/authGo/logger"
 	"github.com/Kotlang/authGo/models"
 	odm "github.com/SaiNageswarS/mongo-odm"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 )
 
@@ -12,28 +11,19 @@ type LoginRepository struct {
 	odm.AbstractRepository
 }
 
-func NewLoginRepository(db *mongo.Database) *LoginRepository {
-	return &LoginRepository{
-		odm.AbstractRepository{db},
-	}
-}
-
-func (t *LoginRepository) FindOneByEmail(domain string, email string) chan *models.LoginModel {
+func (t *LoginRepository) FindOneByEmail(email string) chan *models.LoginModel {
 	ch := make(chan *models.LoginModel)
 
 	go func() {
-		login := &models.LoginModel{
-			Email:  email,
-			Tenant: domain,
-		}
-		err := <-t.FindOneById(login)
+		id := (&models.LoginModel{Email: email}).Id()
+		res := <-t.FindOneById(id)
 
-		if err != nil {
-			logger.Error("Error fetching login info", zap.Error(err))
+		if res.Err != nil {
+			logger.Error("Error fetching login info", zap.Error(res.Err))
 			ch <- nil
 			return
 		}
-		ch <- login
+		ch <- res.Value.(*models.LoginModel)
 	}()
 	return ch
 }

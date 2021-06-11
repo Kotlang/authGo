@@ -31,26 +31,25 @@ func (c *EmailClient) SendOtp(tenant, emailId string) {
 	loginInfo := c.getOrCreateByEmail(tenant, emailId)
 	logger.Info("Fetched login info is", zap.Any("loginInfo", loginInfo))
 	loginInfo.Otp = "1214"
-	<-c.db.Login.Save(loginInfo)
+	<-c.db.Login(tenant).Save(loginInfo)
 }
 
 func (c *EmailClient) getOrCreateByEmail(tenant, emailId string) *models.LoginModel {
-	loginInfo := <-c.db.Login.FindOneByEmail(tenant, emailId)
+	loginInfo := <-c.db.Login(tenant).FindOneByEmail(emailId)
 	if loginInfo == nil {
 		loginInfo = &models.LoginModel{
 			Email:     emailId,
-			CreatedOn: time.Now().Format("UnixDate"),
+			CreatedOn: time.Now().Unix(),
 			UserType:  "default",
-			Tenant:    tenant,
 		}
-		<-c.db.Login.Save(loginInfo)
+		<-c.db.Login(tenant).Save(loginInfo)
 	}
 	return loginInfo
 }
 
 func (c *EmailClient) ValidateOtpAndGetLoginInfo(tenant, emailId, otp string) (*models.LoginModel, error) {
-	loginInfo := c.getOrCreateByEmail(tenant, emailId)
-	if otp != loginInfo.Otp {
+	loginInfo := <-c.db.Login(tenant).FindOneByEmail(emailId)
+	if loginInfo == nil || otp != loginInfo.Otp {
 		return nil, status.Error(codes.PermissionDenied, "Wrong OTP")
 	}
 	return loginInfo, nil

@@ -41,7 +41,7 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
 
-	tenantDetails := <-s.db.Tenant.FindOneByToken(req.Domain)
+	tenantDetails := <-s.db.Tenant().FindOneByToken(req.Domain)
 	if tenantDetails == nil {
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
 	}
@@ -58,7 +58,7 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
 
-	tenantDetails := <-s.db.Tenant.FindOneByToken(req.Domain)
+	tenantDetails := <-s.db.Tenant().FindOneByToken(req.Domain)
 	if tenantDetails == nil {
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
 	}
@@ -72,18 +72,18 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 		}
 	}
 
-	profileData := &models.ProfileModel{
-		LoginId: loginInfo.Id(),
-		Tenant:  tenantDetails.Name,
-	}
-	err = <-s.db.Profile.FindOneById(profileData)
-	if err != nil {
-		logger.Error("Failed fetching profile", zap.Error(err))
+	logger.Info("Login validation successful. Fetching profile for ",
+		zap.String("userId", loginInfo.Id()),
+		zap.Any("LoginModel", loginInfo))
+	profileData := <-s.db.Profile(tenantDetails.Name).FindOneById(loginInfo.Id())
+	if profileData.Err != nil {
+		logger.Error("Failed fetching profile", zap.Error(profileData.Err))
 	}
 
-	logger.Info("Fetched profile as ", zap.Any("profile", profileData))
+	logger.Info("Fetched profile as ", zap.Any("profile", profileData.Value))
 	profileProto := &pb.UserProfileProto{}
-	copier.Copy(profileProto, profileData)
+	copier.Copy(profileProto, profileData.Value)
+	copier.CopyWithOption(profileProto, loginInfo, copier.Option{IgnoreEmpty: true})
 
 	jwtToken := auth.GetToken(tenantDetails.Name, loginInfo.Id(), loginInfo.UserType)
 	return &pb.AuthResponse{

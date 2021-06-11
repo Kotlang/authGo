@@ -22,13 +22,6 @@ func NewProfileService(db *db.AuthDb) *ProfileService {
 	}
 }
 
-func getNonEmpty(actualVal, defaultVal string) string {
-	if len(actualVal) > 0 {
-		return actualVal
-	}
-	return defaultVal
-}
-
 func copyAll(oldMap, newMap map[string]interface{}) map[string]interface{} {
 	for k, v := range newMap {
 		oldMap[k] = v
@@ -43,23 +36,24 @@ func getMapFromJson(jsonStr string) map[string]interface{} {
 }
 
 func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.CreateProfileRequest) (*pb.UserProfileProto, error) {
-	userId, domain := auth.GetUserIdAndTenant(ctx)
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	oldProfile := &models.ProfileModel{}
-	oldProfile.LoginId = userId
-	oldProfile.Tenant = domain
+	loginResChannel := s.db.Login(tenant).FindOneById(userId)
+	profileResChannel := s.db.Profile(tenant).FindOneById(userId)
 
-	<-s.db.Profile.FindOneById(oldProfile)
-
+	oldProfile := (<-profileResChannel).Value.(*models.ProfileModel)
 	// merge old profile and new profile
 	newMetadata := copyAll(oldProfile.MetadataMap, getMapFromJson(req.MetaDataMap))
 	copier.CopyWithOption(oldProfile, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 	oldProfile.MetadataMap = newMetadata
 
-	err := <-s.db.Profile.Save(oldProfile)
+	err := <-s.db.Profile(tenant).Save(oldProfile)
 
 	userProfileProto := &pb.UserProfileProto{}
 	copier.Copy(userProfileProto, oldProfile)
+
+	loginInfo := (<-loginResChannel).Value.(*models.LoginModel)
+	copier.CopyWithOption(userProfileProto, loginInfo, copier.Option{IgnoreEmpty: true})
 
 	return userProfileProto, err
 }

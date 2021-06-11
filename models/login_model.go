@@ -4,17 +4,12 @@ import (
 	"encoding/base64"
 )
 
-var loginCollectionNamePrefix string = "login_"
-
 type LoginModel struct {
 	Email     string `bson:"email"`
 	Phone     string `bson:"phone"`
 	Otp       string `bson:"otp"`
 	UserType  string `bson:"userType"`
-	CreatedOn string `bson:"createdOn"`
-
-	//internal field
-	Tenant string
+	CreatedOn int64  `bson:"createdOn"`
 }
 
 func (m *LoginModel) Id() string {
@@ -23,8 +18,4 @@ func (m *LoginModel) Id() string {
 	} else {
 		return base64.StdEncoding.EncodeToString([]byte(m.Phone))
 	}
-}
-
-func (m *LoginModel) Collection() string {
-	return loginCollectionNamePrefix + m.Tenant
 }

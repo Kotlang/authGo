@@ -3,7 +3,7 @@ module github.com/Kotlang/authGo
 go 1.16
 
 require (
-	github.com/SaiNageswarS/mongo-odm v0.1.1
+	github.com/SaiNageswarS/mongo-odm v0.1.4
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0

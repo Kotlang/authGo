@@ -3,9 +3,12 @@ package db
 import (
 	"context"
 	"crypto/tls"
+	"reflect"
 	"time"
 
 	"github.com/Kotlang/authGo/logger"
+	"github.com/Kotlang/authGo/models"
+	odm "github.com/SaiNageswarS/mongo-odm"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
@@ -14,12 +17,10 @@ import (
 var DatabaseName string = "auth"
 
 type AuthDb struct {
-	Login   *LoginRepository
-	Profile *ProfileRepository
-	Tenant  *TenantRepository
+	db *mongo.Database
 }
 
-func getAuthDbReference(mongo_uri string) *mongo.Database {
+func NewAuthDb(mongo_uri string) *AuthDb {
 	mongoOpts := options.Client().ApplyURI(mongo_uri)
 	mongoOpts.TLSConfig.MinVersion = tls.VersionTLS12
 	mongoOpts.TLSConfig.InsecureSkipVerify = true
@@ -41,15 +42,32 @@ func getAuthDbReference(mongo_uri string) *mongo.Database {
 	}
 
 	db := client.Database(DatabaseName)
-	return db
+	return &AuthDb{db: db}
 }
 
-func NewAuthDb(mongo_uri string) *AuthDb {
-	authDbRef := getAuthDbReference(mongo_uri)
-
-	return &AuthDb{
-		Login:   NewLoginRepository(authDbRef),
-		Profile: NewProfileRepository(authDbRef),
-		Tenant:  NewTenantRepository(authDbRef),
+func (a *AuthDb) Login(tenant string) *LoginRepository {
+	repo := odm.AbstractRepository{
+		Db:             a.db,
+		CollectionName: "login_" + tenant,
+		Model:          reflect.TypeOf(models.LoginModel{}),
 	}
+	return &LoginRepository{repo}
+}
+
+func (a *AuthDb) Profile(tenant string) *ProfileRepository {
+	repo := odm.AbstractRepository{
+		Db:             a.db,
+		CollectionName: "profile_" + tenant,
+		Model:          reflect.TypeOf(models.ProfileModel{}),
+	}
+	return &ProfileRepository{repo}
+}
+
+func (a *AuthDb) Tenant() *TenantRepository {
+	repo := odm.AbstractRepository{
+		Db:             a.db,
+		CollectionName: "tenant",
+		Model:          reflect.TypeOf(models.TenantModel{}),
+	}
+	return &TenantRepository{repo}
 }
