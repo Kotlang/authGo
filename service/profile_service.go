@@ -7,6 +7,7 @@ import (
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
 	"github.com/Kotlang/authGo/models"
+	s3client "github.com/Kotlang/authGo/s3Client"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/jinzhu/copier"
 )
@@ -56,4 +57,39 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	copier.CopyWithOption(userProfileProto, loginInfo, copier.Option{IgnoreEmpty: true})
 
 	return userProfileProto, err
+}
+
+func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.GetProfileRequest) (*pb.UserProfileProto, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	if len(req.UserId) > 0 {
+		userId = req.UserId
+	}
+	profile := s.db.Profile(tenant).FindOneById(userId)
+	loginInfo := s.db.Login(tenant).FindOneById(userId)
+
+	profileProto := &pb.UserProfileProto{}
+
+	copier.Copy(profileProto, (<-profile).Value)
+	copier.CopyWithOption(profileProto, (<-loginInfo).Value, copier.Option{IgnoreEmpty: true})
+	return profileProto, nil
+}
+
+func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.ProfileImageUploadRequest) (*pb.ProfileImageUploadURL, error) {
+	uploadInstructions := `
+	| 1. Send profile image file to above uploadURL as a PUT request. 
+	| 
+	| curl --location --request PUT '<aboveURL>' 
+	|      --header 'Content-Type: image/jpeg' 
+	|      --data-binary '@/path/to/file.jpg'
+	|      
+	| 2. Send mediaUrl in createOrUpdateProfile request.`
+
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+	preSignedUrl, downloadUrl := s3client.GetPresignedUrlForProfilePic(tenant, userId, req.MediaExtension)
+	return &pb.ProfileImageUploadURL{
+		UploadUrl:    preSignedUrl,
+		MediaUrl:     downloadUrl,
+		Instructions: uploadInstructions,
+	}, nil
 }
