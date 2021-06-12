@@ -1,9 +1,9 @@
 package db
 
 import (
-	"github.com/Kotlang/authGo/logger"
 	"github.com/Kotlang/authGo/models"
-	odm "github.com/SaiNageswarS/mongo-odm"
+	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"go.uber.org/zap"
 )
 

@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/Kotlang/authGo/auth"
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
 	"github.com/Kotlang/authGo/models"
+	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/jinzhu/copier"
 )
 

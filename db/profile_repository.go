@@ -1,7 +1,7 @@
 package db
 
 import (
-	odm "github.com/SaiNageswarS/mongo-odm"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 )
 
 type ProfileRepository struct {

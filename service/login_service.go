@@ -3,12 +3,12 @@ package service
 import (
 	"context"
 
-	"github.com/Kotlang/authGo/auth"
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
-	"github.com/Kotlang/authGo/logger"
 	"github.com/Kotlang/authGo/models"
 	"github.com/Kotlang/authGo/otp"
+	"github.com/SaiNageswarS/go-api-boot/auth"
+	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"

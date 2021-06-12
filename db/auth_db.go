@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/Kotlang/authGo/logger"
 	"github.com/Kotlang/authGo/models"
-	odm "github.com/SaiNageswarS/mongo-odm"
+	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"

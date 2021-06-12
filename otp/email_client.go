@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/Kotlang/authGo/db"
-	"github.com/Kotlang/authGo/logger"
 	"github.com/Kotlang/authGo/models"
+	"github.com/SaiNageswarS/go-api-boot/logger"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
