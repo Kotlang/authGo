@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-
 	"github.com/Kotlang/authGo/db"
 	"github.com/Kotlang/authGo/otp"
 	"github.com/Kotlang/authGo/service"
@@ -20,9 +18,7 @@ type Inject struct {
 func NewInject() *Inject {
 	godotenv.Load()
 	inj := &Inject{}
-
-	mongo_uri := os.Getenv("MONGO_URI")
-	inj.AuthDb = db.NewAuthDb(mongo_uri)
+	inj.AuthDb = &db.AuthDb{}
 
 	inj.EmailClient = otp.NewEmailClient(inj.AuthDb)
 
