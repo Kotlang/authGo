@@ -7,8 +7,6 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/odm"
 )
 
-var DatabaseName string = "auth"
-
 type AuthDb struct{}
 
 func (a *AuthDb) Login(tenant string) *LoginRepository {
