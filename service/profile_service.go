@@ -40,9 +40,16 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	loginResChannel := s.db.Login(tenant).FindOneById(userId)
-	profileResChannel := s.db.Profile(tenant).FindOneById(userId)
+	profileRes := <-s.db.Profile(tenant).FindOneById(userId)
 
-	oldProfile := (<-profileResChannel).Value.(*models.ProfileModel)
+	var oldProfile *models.ProfileModel
+	// old profile doesn't exist
+	if profileRes.Err != nil {
+		oldProfile = &models.ProfileModel{LoginId: userId}
+	} else {
+		oldProfile = profileRes.Value.(*models.ProfileModel)
+	}
+
 	// merge old profile and new profile
 	newMetadata := copyAll(oldProfile.MetadataMap, getMapFromJson(req.MetaDataMap))
 	copier.CopyWithOption(oldProfile, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})

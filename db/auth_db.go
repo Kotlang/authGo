@@ -11,7 +11,8 @@ type AuthDb struct{}
 
 func (a *AuthDb) Login(tenant string) *LoginRepository {
 	repo := odm.AbstractRepository{
-		CollectionName: "login_" + tenant,
+		Database:       tenant + "_auth",
+		CollectionName: "login",
 		Model:          reflect.TypeOf(models.LoginModel{}),
 	}
 	return &LoginRepository{repo}
@@ -19,7 +20,8 @@ func (a *AuthDb) Login(tenant string) *LoginRepository {
 
 func (a *AuthDb) Profile(tenant string) *ProfileRepository {
 	repo := odm.AbstractRepository{
-		CollectionName: "profile_" + tenant,
+		Database:       tenant + "_auth",
+		CollectionName: "profile",
 		Model:          reflect.TypeOf(models.ProfileModel{}),
 	}
 	return &ProfileRepository{repo}
@@ -27,6 +29,7 @@ func (a *AuthDb) Profile(tenant string) *ProfileRepository {
 
 func (a *AuthDb) Tenant() *TenantRepository {
 	repo := odm.AbstractRepository{
+		Database:       "global",
 		CollectionName: "tenant",
 		Model:          reflect.TypeOf(models.TenantModel{}),
 	}
