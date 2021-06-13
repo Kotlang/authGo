@@ -59,3 +59,47 @@ jobs:
         run: |
           docker tag $IMAGE_NAME kotlangauthsvc.azurecr.io/$IMAGE_NAME
           docker push kotlangauthsvc.azurecr.io/$IMAGE_NAME
+
+  deploy-service:
+    needs: build-service
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set aks context
+        uses: azure/aks-set-context@v1
+        with:
+          creds: "${{ secrets.AZURE_CREDENTIALS }}"
+          cluster-name: KotlangCluster
+          resource-group: kotlang
+
+      - name: Set k8s secrets
+        uses: azure/k8s-create-secret@v1
+        with:
+          namespace: "default"
+          secret-type: "generic"
+          arguments: --from-literal=mongoUri=${{ secrets.MONGO_URI }} --from-literal=accessSecret=${{ secrets.JWT_ACCESS_KEY }} --from-literal=awsAccessKeyId=${{ secrets.AWS_ACCESS_KEY }} --from-literal=awsSecretAccessKey=${{ secrets.AWS_ACCESS_SECRET }}
+          secret-name: app-secrets
+
+      - name: Set k8s secrets to access ACR
+        uses: azure/k8s-create-secret@v1
+        with:
+          container-registry-url: kotlangauthsvc.azurecr.io
+          container-registry-username: ${{ secrets.ACR_USERNAME }}
+          container-registry-password: ${{ secrets.ACR_PASSWORD }}
+          secret-name: acr-secrets
+          namespace: default
+          force: true
+
+      - name: AKS Deploy
+        uses: azure/k8s-deploy@v1
+        with:
+          manifests: |
+            kubernetes/deployment.yml
+            kubernetes/service.yml
+          images: |
+            kotlangauthsvc.azurecr.io/auth-service:latest
+          imagepullsecrets: |
+            acr-secrets
+          namespace: default

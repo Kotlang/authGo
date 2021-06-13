@@ -3,3 +3,4 @@ build
 generated
 vendor
 .env
+azure_secrets

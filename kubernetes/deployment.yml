@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-svc-deployment
+  labels:
+    app: auth-svc
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: auth-svc
+  template:
+    metadata:
+      labels:
+        app: auth-svc
+    spec:
+      containers:
+        - name: auth-svc
+          image: kotlangauthsvc.azurecr.io/auth-service:latest
+          env:
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: mongoUri
+            - name: ACCESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: accessSecret
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: awsAccessKeyId
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: awsSecretAccessKey
+          ports:
+            - containerPort: 8081
+              name: web
+            - containerPort: 50051
+              name: grpc
