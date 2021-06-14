@@ -6,51 +6,38 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	"github.com/Kotlang/authGo/models"
-	"github.com/SaiNageswarS/go-api-boot/logger"
-	"go.uber.org/zap"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type EmailClient struct {
-	db *db.AuthDb
+	Db *db.AuthDb
 }
 
-func NewEmailClient(db *db.AuthDb) *EmailClient {
-	return &EmailClient{
-		db: db,
-	}
-}
-
-func (c *EmailClient) IsValidEmail(emailOrPhone string) bool {
+func (c *EmailClient) IsValid(emailOrPhone string) bool {
 	match, _ := regexp.MatchString("^(.+)@(.+)$", emailOrPhone)
 	return match
 }
 
 func (c *EmailClient) SendOtp(tenant, emailId string) {
-	loginInfo := c.getOrCreateByEmail(tenant, emailId)
-	logger.Info("Fetched login info is", zap.Any("loginInfo", loginInfo))
-	loginInfo.Otp = "1214"
-	<-c.db.Login(tenant).Save(loginInfo)
+	// TODO: Use twilio with send-grid to send otp to email.
 }
 
-func (c *EmailClient) getOrCreateByEmail(tenant, emailId string) *models.LoginModel {
-	loginInfo := <-c.db.Login(tenant).FindOneByEmail(emailId)
+func (c *EmailClient) GetOrCreateLoginInfo(tenant, emailId string) *models.LoginModel {
+	loginInfo := <-c.Db.Login(tenant).FindOneByEmail(emailId)
 	if loginInfo == nil {
 		loginInfo = &models.LoginModel{
 			Email:     emailId,
 			CreatedOn: time.Now().Unix(),
 			UserType:  "default",
 		}
-		<-c.db.Login(tenant).Save(loginInfo)
+		<-c.Db.Login(tenant).Save(loginInfo)
 	}
 	return loginInfo
 }
 
-func (c *EmailClient) ValidateOtpAndGetLoginInfo(tenant, emailId, otp string) (*models.LoginModel, error) {
-	loginInfo := <-c.db.Login(tenant).FindOneByEmail(emailId)
-	if loginInfo == nil || otp != loginInfo.Otp {
-		return nil, status.Error(codes.PermissionDenied, "Wrong OTP")
-	}
-	return loginInfo, nil
+func (c *EmailClient) GetLoginInfo(tenant, emailId string) *models.LoginModel {
+	return <-c.Db.Login(tenant).FindOneByEmail(emailId)
+}
+
+func (c *EmailClient) Verify(to, otp string) bool {
+	return true
 }

@@ -10,7 +10,8 @@ import (
 type Inject struct {
 	AuthDb *db.AuthDb
 
-	EmailClient    *otp.EmailClient
+	Otp *otp.OtpClient
+
 	LoginService   *service.LoginService
 	ProfileService *service.ProfileService
 }
@@ -20,9 +21,9 @@ func NewInject() *Inject {
 	inj := &Inject{}
 	inj.AuthDb = &db.AuthDb{}
 
-	inj.EmailClient = otp.NewEmailClient(inj.AuthDb)
+	inj.Otp = otp.NewOtpClient(inj.AuthDb)
 
-	inj.LoginService = service.NewLoginService(inj.AuthDb, inj.EmailClient)
+	inj.LoginService = service.NewLoginService(inj.AuthDb, inj.Otp)
 	inj.ProfileService = service.NewProfileService(inj.AuthDb)
 
 	return inj
