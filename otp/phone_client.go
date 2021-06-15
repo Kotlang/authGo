@@ -2,7 +2,6 @@ package otp
 
 import (
 	"os"
-	"time"
 	"unicode"
 
 	"github.com/Kotlang/authGo/db"
@@ -30,7 +29,7 @@ func (c *PhoneClient) IsValid(emailOrPhone string) bool {
 	return len(emailOrPhone) == 10 && isAllDigit(emailOrPhone)
 }
 
-func (c *PhoneClient) SendOtp(phoneNumber, otp string) {
+func (c *PhoneClient) SendOtp(phoneNumber string) {
 	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
 	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
 	client := twilio.NewRestClient(accountSid, authToken)
@@ -51,17 +50,12 @@ func (c *PhoneClient) SendOtp(phoneNumber, otp string) {
 	logger.Info("Sending otp status", zap.String("status", *res.Status))
 }
 
-func (c *PhoneClient) GetOrCreateLoginInfo(tenant, phoneNumber string) *models.LoginModel {
-	loginInfo := <-c.Db.Login(tenant).FindOneByPhone(phoneNumber)
-	if loginInfo == nil {
-		loginInfo = &models.LoginModel{
-			Phone:     phoneNumber,
-			CreatedOn: time.Now().Unix(),
-			UserType:  "default",
-		}
-		<-c.Db.Login(tenant).Save(loginInfo)
+func (c *PhoneClient) CreateLoginInfo(tenant, phoneNumber string) {
+	loginInfo := &models.LoginModel{
+		Phone:    phoneNumber,
+		UserType: "default",
 	}
-	return loginInfo
+	<-c.Db.Login(tenant).Save(loginInfo)
 }
 
 func (c *PhoneClient) GetLoginInfo(tenant, to string) *models.LoginModel {

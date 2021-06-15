@@ -3,7 +3,7 @@ module github.com/Kotlang/authGo
 go 1.16
 
 require (
-	github.com/SaiNageswarS/go-api-boot v0.1.6
+	github.com/SaiNageswarS/go-api-boot v0.1.8
 	github.com/aws/aws-sdk-go v1.36.30
 	github.com/jinzhu/copier v0.3.2
 	github.com/joho/godotenv v1.3.0

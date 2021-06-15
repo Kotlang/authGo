@@ -2,7 +2,6 @@ package otp
 
 import (
 	"regexp"
-	"time"
 
 	"github.com/Kotlang/authGo/db"
 	"github.com/Kotlang/authGo/models"
@@ -17,21 +16,16 @@ func (c *EmailClient) IsValid(emailOrPhone string) bool {
 	return match
 }
 
-func (c *EmailClient) SendOtp(tenant, emailId string) {
+func (c *EmailClient) SendOtp(emailId string) {
 	// TODO: Use twilio with send-grid to send otp to email.
 }
 
-func (c *EmailClient) GetOrCreateLoginInfo(tenant, emailId string) *models.LoginModel {
-	loginInfo := <-c.Db.Login(tenant).FindOneByEmail(emailId)
-	if loginInfo == nil {
-		loginInfo = &models.LoginModel{
-			Email:     emailId,
-			CreatedOn: time.Now().Unix(),
-			UserType:  "default",
-		}
-		<-c.Db.Login(tenant).Save(loginInfo)
+func (c *EmailClient) CreateLoginInfo(tenant, emailId string) {
+	loginInfo := &models.LoginModel{
+		Email:    emailId,
+		UserType: "default",
 	}
-	return loginInfo
+	<-c.Db.Login(tenant).Save(loginInfo)
 }
 
 func (c *EmailClient) GetLoginInfo(tenant, emailId string) *models.LoginModel {

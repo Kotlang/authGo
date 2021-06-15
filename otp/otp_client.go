@@ -1,21 +1,15 @@
 package otp
 
 import (
-	"crypto/rand"
-	"fmt"
-	"math/big"
-
 	"github.com/Kotlang/authGo/db"
 	"github.com/Kotlang/authGo/models"
-	"github.com/SaiNageswarS/go-api-boot/logger"
-	"go.uber.org/zap"
 )
 
 type Channel interface {
 	IsValid(to string) bool
-	SendOtp(to string, otp string)
-	GetOrCreateLoginInfo(tenant, to string) *models.LoginModel
+	SendOtp(to string)
 	GetLoginInfo(tenant, to string) *models.LoginModel
+	CreateLoginInfo(tenant, emailOrPhone string)
 	Verify(to, otp string) bool
 }
 
@@ -31,30 +25,17 @@ func NewOtpClient(db *db.AuthDb) *OtpClient {
 	}
 }
 
-func generateSixDigitsOtp() string {
-	max := big.NewInt(999999)
-	n, err := rand.Int(rand.Reader, max)
-	if err != nil {
-		logger.Error("Failed generating otp", zap.Error(err))
-		return "121451"
-	}
-	return fmt.Sprintf("%v", n.Int64())
-}
-
 func (c *OtpClient) SendOtp(tenant, to string) {
-	otp := generateSixDigitsOtp()
-
 	for _, channel := range c.channels {
 		if channel.IsValid(to) {
 			// create user if doesn't exist.
-			loginInfo := channel.GetOrCreateLoginInfo(tenant, to)
-			// send otp through the channel.
-			channel.SendOtp(to, otp)
+			loginInfo := channel.GetLoginInfo(tenant, to)
+			if loginInfo == nil {
+				channel.CreateLoginInfo(tenant, to)
+			}
 
-			// legacy code. For phone, twilio verifies otp at its end.
-			// save otp for verification.
-			loginInfo.Otp = otp
-			<-c.db.Login(tenant).Save(loginInfo)
+			// send otp through the channel.
+			channel.SendOtp(to)
 		}
 	}
 }
