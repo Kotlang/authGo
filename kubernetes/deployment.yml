@@ -38,6 +38,16 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: awsSecretAccessKey
+            - name: TWILIO_ACCOUNT_SID
+              valueFrom:
+                secretKeyRef:
+                  name: twilio-secrets
+                  key: accountSid
+            - name: TWILIO_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: twilio-secrets
+                  key: authToken
           ports:
             - containerPort: 8081
               name: web
