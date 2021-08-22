@@ -24,7 +24,7 @@ func GetPresignedUrlForProfilePic(tenant, userId, extension string) (string, str
 	// Create S3 service client
 	svc := s3.New(sess)
 
-	imagePath := fmt.Sprintf("profile-images/%s/%s/%d-image.%s", tenant, userId, time.Now().Unix(), extension)
+	imagePath := fmt.Sprintf("profile-images/%s/%s/%d.%s", tenant, userId, time.Now().Unix(), extension)
 	req, _ := svc.GetObjectRequest(&s3.GetObjectInput{
 		Bucket: aws.String("kotlang-assets"),
 		Key:    aws.String(imagePath),
