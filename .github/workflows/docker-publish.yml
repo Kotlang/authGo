@@ -81,6 +81,14 @@ jobs:
           arguments: --from-literal=mongoUri=${{ secrets.MONGO_URI }} --from-literal=accessSecret=${{ secrets.JWT_ACCESS_KEY }} --from-literal=awsAccessKeyId=${{ secrets.AWS_ACCESS_KEY }} --from-literal=awsSecretAccessKey=${{ secrets.AWS_ACCESS_SECRET }}
           secret-name: app-secrets
 
+      - name: Set Azure Storage Secrets
+        uses: azure/k8s-create-secret@v1
+        with:
+          namespace: "default"
+          secret-type: "generic"
+          arguments: --from-literal=azureStorageAccount=${{ secrets.AZURE_STORAGE_ACCOUNT }} --from-literal=azureStorageAccessKey=${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
+          secret-name: azure-storage-secrets
+
       - name: Set Twilio k8s secrets
         uses: azure/k8s-create-secret@v1
         with:

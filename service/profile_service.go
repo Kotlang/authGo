@@ -3,13 +3,19 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"time"
 
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
 	"github.com/Kotlang/authGo/models"
-	s3client "github.com/Kotlang/authGo/s3Client"
 	"github.com/SaiNageswarS/go-api-boot/auth"
+	"github.com/SaiNageswarS/go-api-boot/aws"
+	"github.com/SaiNageswarS/go-api-boot/azure"
+	"github.com/SaiNageswarS/go-api-boot/bootUtils"
+	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
+	"go.uber.org/zap"
 )
 
 type ProfileService struct {
@@ -93,10 +99,38 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.P
 	| 2. Send mediaUrl in createOrUpdateProfile request.`
 
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
-	preSignedUrl, downloadUrl := s3client.GetPresignedUrlForProfilePic(tenant, userId, req.MediaExtension)
+	key := fmt.Sprintf("%s/%s/%d.jpg", tenant, userId, time.Now().Unix())
+	preSignedUrl, downloadUrl := aws.S3.GetPresignedUrl("kotlang-assets", key)
 	return &pb.ProfileImageUploadURL{
 		UploadUrl:    preSignedUrl,
 		MediaUrl:     downloadUrl,
 		Instructions: uploadInstructions,
 	}, nil
+}
+
+func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImageServer) error {
+	userId, tenant := auth.GetUserIdAndTenant(stream.Context())
+	logger.Info("Uploading image", zap.String("userId", userId), zap.String("tenant", tenant))
+	imageData, err := bootUtils.BufferGrpcServerStream(stream, func() ([]byte, error) {
+		req, err := stream.Recv()
+		if err != nil {
+			return nil, err
+		}
+		return req.ChunkData, nil
+	})
+	if err != nil {
+		logger.Error("Failed uploading image", zap.Error(err))
+		return err
+	}
+
+	// upload imageData to Azure bucket.
+	path := fmt.Sprintf("%s/%s/%d.jpg", tenant, userId, time.Now().Unix())
+	res := <-azure.Storage.UploadStream("profile-photos", path, imageData)
+
+	if res.Err != nil {
+		logger.Error("Failed uploading profile image.", zap.Error(res.Err))
+		return res.Err
+	}
+	stream.SendAndClose(&pb.UploadImageResponse{UploadPath: res.Value.(string)})
+	return nil
 }

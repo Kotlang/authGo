@@ -38,6 +38,16 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: awsSecretAccessKey
+            - name: AZURE_STORAGE_ACCOUNT
+              valueFrom:
+                secretKeyRef:
+                  name: azure-storage-secrets
+                  key: azureStorageAccount
+            - name: AZURE_STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: azure-storage-secrets
+                  key: azureStorageAccessKey
             - name: TWILIO_ACCOUNT_SID
               valueFrom:
                 secretKeyRef:
