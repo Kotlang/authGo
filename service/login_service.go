@@ -63,13 +63,17 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 		return nil, status.Error(codes.PermissionDenied, "Wrong OTP")
 	}
 
-	profileData := <-s.db.Profile(tenantDetails.Name).FindOneById(loginInfo.Id())
-	if profileData.Err != nil {
-		logger.Error("Failed fetching profile", zap.Error(profileData.Err))
+	// fetch profile for user.
+	profileProto := &pb.UserProfileProto{}
+	resultChan, errorChan := s.db.Profile(tenantDetails.Name).FindOneById(loginInfo.Id())
+	select {
+	case profile := <-resultChan:
+		copier.Copy(profileProto, profile)
+	case err := <-errorChan:
+		logger.Error("Error fetching profile", zap.Error(err))
 	}
 
-	profileProto := &pb.UserProfileProto{}
-	copier.Copy(profileProto, profileData.Value)
+	// copy login info to profile even if profile is not present.
 	copier.CopyWithOption(profileProto, loginInfo, copier.Option{IgnoreEmpty: true})
 
 	jwtToken := auth.GetToken(tenantDetails.Name, loginInfo.Id(), loginInfo.UserType)

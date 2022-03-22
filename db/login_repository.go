@@ -8,7 +8,7 @@ import (
 )
 
 type LoginRepository struct {
-	odm.AbstractRepository
+	odm.AbstractRepository[models.LoginModel]
 }
 
 func (t *LoginRepository) FindOneByEmail(email string) chan *models.LoginModel {
@@ -16,14 +16,14 @@ func (t *LoginRepository) FindOneByEmail(email string) chan *models.LoginModel {
 
 	go func() {
 		id := (&models.LoginModel{Email: email}).Id()
-		res := <-t.FindOneById(id)
+		resultChan, errorChan := t.FindOneById(id)
 
-		if res.Err != nil {
-			logger.Error("Error fetching login info", zap.Error(res.Err))
-			ch <- nil
-			return
+		select {
+		case res := <-resultChan:
+			ch <- res
+		case err := <-errorChan:
+			logger.Error("Error fetching login info", zap.Error(err))
 		}
-		ch <- res.Value.(*models.LoginModel)
 	}()
 	return ch
 }
@@ -33,14 +33,14 @@ func (t *LoginRepository) FindOneByPhone(phone string) chan *models.LoginModel {
 
 	go func() {
 		id := (&models.LoginModel{Phone: phone}).Id()
-		res := <-t.FindOneById(id)
+		resultChan, errorChan := t.FindOneById(id)
 
-		if res.Err != nil {
-			logger.Error("Error fetching login info", zap.Error(res.Err))
-			ch <- nil
-			return
+		select {
+		case res := <-resultChan:
+			ch <- res
+		case err := <-errorChan:
+			logger.Error("Error fetching login info", zap.Error(err))
 		}
-		ch <- res.Value.(*models.LoginModel)
 	}()
 	return ch
 }

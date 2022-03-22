@@ -9,22 +9,22 @@ import (
 )
 
 type TenantRepository struct {
-	odm.AbstractRepository
+	odm.AbstractRepository[models.TenantModel]
 }
 
 func (t *TenantRepository) FindOneByToken(token string) chan *models.TenantModel {
 	ch := make(chan *models.TenantModel)
 
 	go func() {
-		res := <-t.FindOne(bson.M{"token": token})
+		resultChan, errorChan := t.FindOne(bson.M{"token": token})
 
-		if res.Err != nil {
-			logger.Error("Error fetching tenant", zap.Error(res.Err))
+		select {
+		case res := <-resultChan:
+			ch <- res
+		case err := <-errorChan:
+			logger.Error("Error fetching tenant info", zap.Error(err))
 			ch <- nil
-			return
 		}
-
-		ch <- res.Value.(*models.TenantModel)
 	}()
 	return ch
 }

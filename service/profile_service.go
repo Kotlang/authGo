@@ -45,15 +45,15 @@ func getMapFromJson(jsonStr string) map[string]interface{} {
 func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.CreateProfileRequest) (*pb.UserProfileProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginResChannel := s.db.Login(tenant).FindOneById(userId)
-	profileRes := <-s.db.Profile(tenant).FindOneById(userId)
+	loginResChannel, _ := s.db.Login(tenant).FindOneById(userId)
+	profileRes, profileErrChan := s.db.Profile(tenant).FindOneById(userId)
 
 	var oldProfile *models.ProfileModel
-	// old profile doesn't exist
-	if profileRes.Err != nil {
+	select {
+	case oldProfile = <-profileRes:
+		logger.Info("Old profile exists.", zap.String("userId", userId), zap.String("tenant", tenant))
+	case <-profileErrChan:
 		oldProfile = &models.ProfileModel{LoginId: userId}
-	} else {
-		oldProfile = profileRes.Value.(*models.ProfileModel)
 	}
 
 	// merge old profile and new profile
@@ -65,9 +65,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 
 	userProfileProto := &pb.UserProfileProto{}
 	copier.Copy(userProfileProto, oldProfile)
-
-	loginInfo := (<-loginResChannel).Value.(*models.LoginModel)
-	copier.CopyWithOption(userProfileProto, loginInfo, copier.Option{IgnoreEmpty: true})
+	copier.CopyWithOption(userProfileProto, <-loginResChannel, copier.Option{IgnoreEmpty: true})
 
 	return userProfileProto, err
 }
@@ -78,13 +76,13 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.GetProfileR
 	if len(req.UserId) > 0 {
 		userId = req.UserId
 	}
-	profile := s.db.Profile(tenant).FindOneById(userId)
-	loginInfo := s.db.Login(tenant).FindOneById(userId)
+	profileResChan, _ := s.db.Profile(tenant).FindOneById(userId)
+	loginInfoChan, _ := s.db.Login(tenant).FindOneById(userId)
 
 	profileProto := &pb.UserProfileProto{}
 
-	copier.Copy(profileProto, (<-profile).Value)
-	copier.CopyWithOption(profileProto, (<-loginInfo).Value, copier.Option{IgnoreEmpty: true})
+	copier.Copy(profileProto, <-profileResChan)
+	copier.CopyWithOption(profileProto, <-loginInfoChan, copier.Option{IgnoreEmpty: true})
 	return profileProto, nil
 }
 
@@ -125,12 +123,14 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 
 	// upload imageData to Azure bucket.
 	path := fmt.Sprintf("%s/%s/%d.jpg", tenant, userId, time.Now().Unix())
-	res := <-azure.Storage.UploadStream("profile-photos", path, imageData)
+	resultChan, errorChan := azure.Storage.UploadStream("profile-photos", path, imageData)
 
-	if res.Err != nil {
-		logger.Error("Failed uploading profile image.", zap.Error(res.Err))
-		return res.Err
+	select {
+	case result := <-resultChan:
+		stream.SendAndClose(&pb.UploadImageResponse{UploadPath: result})
+		return nil
+	case err := <-errorChan:
+		logger.Error("Failed uploading image", zap.Error(err))
+		return err
 	}
-	stream.SendAndClose(&pb.UploadImageResponse{UploadPath: res.Value.(string)})
-	return nil
 }
