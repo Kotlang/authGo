@@ -5,8 +5,8 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/server"
 )
 
-var grpcPort = ":50053"
-var webPort = ":8083"
+var grpcPort = ":50051"
+var webPort = ":8081"
 
 func main() {
 	inject := NewInject()
