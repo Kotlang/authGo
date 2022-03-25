@@ -76,13 +76,27 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.GetProfileR
 	if len(req.UserId) > 0 {
 		userId = req.UserId
 	}
-	profileResChan, _ := s.db.Profile(tenant).FindOneById(userId)
-	loginInfoChan, _ := s.db.Login(tenant).FindOneById(userId)
 
 	profileProto := &pb.UserProfileProto{}
 
-	copier.Copy(profileProto, <-profileResChan)
-	copier.CopyWithOption(profileProto, <-loginInfoChan, copier.Option{IgnoreEmpty: true})
+	profileResChan, profileErrorChan := s.db.Profile(tenant).FindOneById(userId)
+	loginInfoChan, loginErrorChan := s.db.Login(tenant).FindOneById(userId)
+
+	// in case of error, return empty profile.
+	select {
+	case profile := <-profileResChan:
+		copier.Copy(profileProto, profile)
+	case <-profileErrorChan:
+		logger.Error("Failed getting profile", zap.String("userId", userId), zap.String("tenant", tenant))
+	}
+
+	select {
+	case loginInfo := <-loginInfoChan:
+		copier.CopyWithOption(profileProto, loginInfo, copier.Option{IgnoreEmpty: true})
+	case <-loginErrorChan:
+		logger.Error("Failed getting login info", zap.String("userId", userId), zap.String("tenant", tenant))
+	}
+
 	return profileProto, nil
 }
 
