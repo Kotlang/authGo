@@ -3,7 +3,7 @@ module github.com/Kotlang/authGo
 go 1.18
 
 require (
-	github.com/SaiNageswarS/go-api-boot v0.1.14
+	github.com/SaiNageswarS/go-api-boot v0.1.17
 	github.com/jinzhu/copier v0.3.2
 	github.com/joho/godotenv v1.3.0
 	github.com/twilio/twilio-go v0.9.0
