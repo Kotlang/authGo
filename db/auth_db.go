@@ -8,25 +8,26 @@ import (
 type AuthDb struct{}
 
 func (a *AuthDb) Login(tenant string) *LoginRepository {
-	repo := odm.AbstractRepository[models.LoginModel]{
+	baseRepo := odm.AbstractRepository[models.LoginModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "login",
 	}
-	return &LoginRepository{repo}
+
+	return &LoginRepository{baseRepo}
 }
 
 func (a *AuthDb) Profile(tenant string) *ProfileRepository {
-	repo := odm.AbstractRepository[models.ProfileModel]{
+	baseRepo := odm.AbstractRepository[models.ProfileModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "profile",
 	}
-	return &ProfileRepository{repo}
+	return &ProfileRepository{baseRepo}
 }
 
 func (a *AuthDb) Tenant() *TenantRepository {
-	repo := odm.AbstractRepository[models.TenantModel]{
+	baseRepo := odm.AbstractRepository[models.TenantModel]{
 		Database:       "global",
 		CollectionName: "tenant",
 	}
-	return &TenantRepository{repo}
+	return &TenantRepository{baseRepo}
 }

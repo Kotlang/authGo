@@ -15,7 +15,8 @@ on:
 
 env:
   # TODO: Change variable to your image's name.
-  IMAGE_NAME: auth-service
+  IMAGE_NAME: kotlang-auth
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
   build-service:
@@ -46,18 +47,11 @@ jobs:
         run: ./build.sh
 
       - name: Build docker image
-        run: docker build -t kotlangauthsvc.azurecr.io/$IMAGE_NAME:${{ github.sha }} .
-
-      - name: Log into registry
-        uses: azure/docker-login@v1
-        with:
-          login-server: kotlangauthsvc.azurecr.io
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+        run: docker build -t sainageswar/$IMAGE_NAME:$IMAGE_TAG.
 
       - name: Push image
         run: |
-          docker push kotlangauthsvc.azurecr.io/$IMAGE_NAME:${{ github.sha }}
+          docker push sainageswar/$IMAGE_NAME:$IMAGE_TAG
 
   deploy-service:
     needs: build-service
@@ -97,16 +91,6 @@ jobs:
           arguments: --from-literal=accountSid=${{ secrets.TWILIO_ACCOUNT_SID }} --from-literal=authToken=${{ secrets.TWILIO_AUTH_TOKEN }}
           secret-name: twilio-secrets
 
-      - name: Set k8s secrets to access ACR
-        uses: azure/k8s-create-secret@v1
-        with:
-          container-registry-url: kotlangauthsvc.azurecr.io
-          container-registry-username: ${{ secrets.ACR_USERNAME }}
-          container-registry-password: ${{ secrets.ACR_PASSWORD }}
-          secret-name: acr-secrets
-          namespace: default
-          force: true
-
       - name: AKS Deploy
         uses: azure/k8s-deploy@v1
         with:
@@ -114,7 +98,5 @@ jobs:
             kubernetes/deployment.yml
             kubernetes/service.yml
           images: |
-            kotlangauthsvc.azurecr.io/auth-service:${{ github.sha }}
-          imagepullsecrets: |
-            acr-secrets
+            sainageswar/$IMAGE_NAME:$IMAGE_TAG
           namespace: default
