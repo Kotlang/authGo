@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: azure/setup-kubectl@v2.0
 
       - name: Set aks context
         uses: azure/aks-set-context@v1
@@ -74,7 +74,7 @@ jobs:
           resource-group: kotlang
 
       - name: Set k8s secrets
-        uses: azure/k8s-create-secret@v1
+        uses: azure/k8s-create-secret@v1.1
         with:
           namespace: "default"
           secret-type: "generic"
@@ -82,7 +82,7 @@ jobs:
           secret-name: app-secrets
 
       - name: Set Azure Storage Secrets
-        uses: azure/k8s-create-secret@v1
+        uses: azure/k8s-create-secret@v1.1
         with:
           namespace: "default"
           secret-type: "generic"
@@ -90,19 +90,29 @@ jobs:
           secret-name: azure-storage-secrets
 
       - name: Set Twilio k8s secrets
-        uses: azure/k8s-create-secret@v1
+        uses: azure/k8s-create-secret@v1.1
         with:
           namespace: "default"
           secret-type: "generic"
           arguments: --from-literal=accountSid=${{ secrets.TWILIO_ACCOUNT_SID }} --from-literal=authToken=${{ secrets.TWILIO_AUTH_TOKEN }}
           secret-name: twilio-secrets
 
-      - name: AKS Deploy
-        uses: azure/k8s-deploy@v1
+      - name: Set ACR credentials
+        uses: Azure/k8s-create-secret@v1.1
         with:
+          container-registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          container-registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+          secret-name: registry-credentials
+
+      - name: AKS Deploy
+        uses: azure/k8s-deploy@v1.4
+        with:
+          action: deploy
           manifests: |
             kubernetes/deployment.yml
             kubernetes/service.yml
           images: |
             sainageswar/$IMAGE_NAME:$IMAGE_TAG
           namespace: default
+          imagepullsecrets: |
+            registry-credentials
