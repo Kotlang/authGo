@@ -18,46 +18,11 @@ spec:
         - name: auth-svc
           image: sainageswar/kotlang-auth:latest
           env:
-            - name: MONGO_URI
+            - name: AZURE-KEYVAULT-NAME
               valueFrom:
                 secretKeyRef:
                   name: app-secrets
-                  key: mongoUri
-            - name: ACCESS_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: accessSecret
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: awsAccessKeyId
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: awsSecretAccessKey
-            - name: AZURE_STORAGE_ACCOUNT
-              valueFrom:
-                secretKeyRef:
-                  name: azure-storage-secrets
-                  key: azureStorageAccount
-            - name: AZURE_STORAGE_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: azure-storage-secrets
-                  key: azureStorageAccessKey
-            - name: TWILIO_ACCOUNT_SID
-              valueFrom:
-                secretKeyRef:
-                  name: twilio-secrets
-                  key: accountSid
-            - name: TWILIO_AUTH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: twilio-secrets
-                  key: authToken
+                  key: azureKeyVaultName
           ports:
             - containerPort: 8081
               name: web

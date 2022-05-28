@@ -81,24 +81,8 @@ jobs:
         with:
           namespace: "default"
           secret-type: "generic"
-          arguments: --from-literal=mongoUri=${{ secrets.MONGO_URI }} --from-literal=accessSecret=${{ secrets.JWT_ACCESS_KEY }} --from-literal=awsAccessKeyId=${{ secrets.AWS_ACCESS_KEY }} --from-literal=awsSecretAccessKey=${{ secrets.AWS_ACCESS_SECRET }}
+          arguments: --from-literal=azureKeyVaultName=${{ secrets.AZURE_KEYVAULT_NAME }}
           secret-name: app-secrets
-
-      - name: Set Azure Storage Secrets
-        uses: azure/k8s-create-secret@v1.1
-        with:
-          namespace: "default"
-          secret-type: "generic"
-          arguments: --from-literal=azureStorageAccount=${{ secrets.AZURE_STORAGE_ACCOUNT }} --from-literal=azureStorageAccessKey=${{ secrets.AZURE_STORAGE_ACCESS_KEY }}
-          secret-name: azure-storage-secrets
-
-      - name: Set Twilio k8s secrets
-        uses: azure/k8s-create-secret@v1.1
-        with:
-          namespace: "default"
-          secret-type: "generic"
-          arguments: --from-literal=accountSid=${{ secrets.TWILIO_ACCOUNT_SID }} --from-literal=authToken=${{ secrets.TWILIO_AUTH_TOKEN }}
-          secret-name: twilio-secrets
 
       - name: Set ACR credentials
         uses: Azure/k8s-create-secret@v1.1

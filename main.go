@@ -9,6 +9,7 @@ var grpcPort = ":50051"
 var webPort = ":8081"
 
 func main() {
+	server.LoadSecretsIntoEnv(true)
 	inject := NewInject()
 
 	bootServer := server.NewGoApiBoot()

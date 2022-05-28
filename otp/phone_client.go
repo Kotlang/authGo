@@ -30,8 +30,8 @@ func (c *PhoneClient) IsValid(emailOrPhone string) bool {
 }
 
 func (c *PhoneClient) SendOtp(phoneNumber string) {
-	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
-	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
+	accountSid := os.Getenv("TWILIO-ACCOUNT-SID")
+	authToken := os.Getenv("TWILIO-AUTH-TOKEN")
 	client := twilio.NewRestClient(accountSid, authToken)
 
 	channel := "sms"
@@ -63,8 +63,8 @@ func (c *PhoneClient) GetLoginInfo(tenant, to string) *models.LoginModel {
 }
 
 func (c *PhoneClient) Verify(to, otp string) bool {
-	accountSid := os.Getenv("TWILIO_ACCOUNT_SID")
-	authToken := os.Getenv("TWILIO_AUTH_TOKEN")
+	accountSid := os.Getenv("TWILIO-ACCOUNT-SID")
+	authToken := os.Getenv("TWILIO-AUTH-TOKEN")
 	client := twilio.NewRestClient(accountSid, authToken)
 
 	to = "+91" + to

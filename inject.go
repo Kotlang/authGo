@@ -4,7 +4,6 @@ import (
 	"github.com/Kotlang/authGo/db"
 	"github.com/Kotlang/authGo/otp"
 	"github.com/Kotlang/authGo/service"
-	"github.com/joho/godotenv"
 )
 
 type Inject struct {
@@ -17,7 +16,6 @@ type Inject struct {
 }
 
 func NewInject() *Inject {
-	godotenv.Load()
 	inj := &Inject{}
 	inj.AuthDb = &db.AuthDb{}
 
