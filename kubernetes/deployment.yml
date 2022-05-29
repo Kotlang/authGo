@@ -18,11 +18,21 @@ spec:
         - name: auth-svc
           image: sainageswar/kotlang-auth:latest
           env:
-            - name: AZURE-KEYVAULT-NAME
+            - name: AZURE_TENANT_ID
               valueFrom:
                 secretKeyRef:
-                  name: app-secrets
-                  key: azureKeyVaultName
+                  name: azure-ad
+                  key: tenantId
+            - name: AZURE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: azure-ad
+                  key: clientId
+            - name: AZURE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: azure-ad
+                  key: clientSecret
           ports:
             - containerPort: 8081
               name: web
