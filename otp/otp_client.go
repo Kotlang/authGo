@@ -46,6 +46,7 @@ func (c *OtpClient) GetLoginInfo(tenant, to string) *models.LoginModel {
 			return channel.GetLoginInfo(tenant, to)
 		}
 	}
+
 	return nil
 }
 

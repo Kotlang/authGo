@@ -40,6 +40,7 @@ func (t *LoginRepository) FindOneByPhone(phone string) chan *models.LoginModel {
 			ch <- res
 		case err := <-errorChan:
 			logger.Error("Error fetching login info", zap.Error(err))
+			ch <- nil
 		}
 	}()
 	return ch
