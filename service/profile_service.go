@@ -29,32 +29,10 @@ func NewProfileService(db *db.AuthDb) *ProfileService {
 	}
 }
 
-func copyAll(oldMap, newMap map[string]interface{}) map[string]interface{} {
-	for k, v := range newMap {
-		oldMap[k] = v
-	}
-	return oldMap
-}
-
-func getMapFromJson(jsonStr string) map[string]interface{} {
-	var result map[string]interface{}
-	json.Unmarshal([]byte(jsonStr), &result)
-	return result
-}
-
 func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.CreateProfileRequest) (*pb.UserProfileProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginResChannel, _ := s.db.Login(tenant).FindOneById(userId)
-	profileRes, profileErrChan := s.db.Profile(tenant).FindOneById(userId)
-
-	var oldProfile *models.ProfileModel
-	select {
-	case oldProfile = <-profileRes:
-		logger.Info("Old profile exists.", zap.String("userId", userId), zap.String("tenant", tenant))
-	case <-profileErrChan:
-		oldProfile = &models.ProfileModel{LoginId: userId}
-	}
+	loginInfo, oldProfile := getExistingOrEmptyProfile(s.db, tenant, userId)
 
 	// merge old profile and new profile
 	newMetadata := copyAll(oldProfile.MetadataMap, getMapFromJson(req.MetaDataMap))
@@ -63,10 +41,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 
 	err := <-s.db.Profile(tenant).Save(oldProfile)
 
-	userProfileProto := &pb.UserProfileProto{}
-	copier.Copy(userProfileProto, oldProfile)
-	copier.CopyWithOption(userProfileProto, <-loginResChannel, copier.Option{IgnoreEmpty: true})
-
+	userProfileProto := getProfileProto(loginInfo, oldProfile)
 	return userProfileProto, err
 }
 
@@ -77,25 +52,8 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.GetProfileR
 		userId = req.UserId
 	}
 
-	profileProto := &pb.UserProfileProto{}
-
-	profileResChan, profileErrorChan := s.db.Profile(tenant).FindOneById(userId)
-	loginInfoChan, loginErrorChan := s.db.Login(tenant).FindOneById(userId)
-
-	// in case of error, return empty profile.
-	select {
-	case profile := <-profileResChan:
-		copier.Copy(profileProto, profile)
-	case <-profileErrorChan:
-		logger.Error("Failed getting profile", zap.String("userId", userId), zap.String("tenant", tenant))
-	}
-
-	select {
-	case loginInfo := <-loginInfoChan:
-		copier.CopyWithOption(profileProto, loginInfo, copier.Option{IgnoreEmpty: true})
-	case <-loginErrorChan:
-		logger.Error("Failed getting login info", zap.String("userId", userId), zap.String("tenant", tenant))
-	}
+	loginInfo, profile := getExistingOrEmptyProfile(s.db, tenant, userId)
+	profileProto := getProfileProto(loginInfo, profile)
 
 	return profileProto, nil
 }
@@ -147,4 +105,63 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 		logger.Error("Failed uploading image", zap.Error(err))
 		return err
 	}
+}
+
+func copyAll(oldMap, newMap map[string]interface{}) map[string]interface{} {
+	if oldMap == nil {
+		oldMap = make(map[string]interface{})
+	}
+
+	for k, v := range newMap {
+		oldMap[k] = v
+	}
+
+	return oldMap
+}
+
+func getMapFromJson(jsonStr string) map[string]interface{} {
+	var result map[string]interface{}
+	json.Unmarshal([]byte(jsonStr), &result)
+	return result
+}
+
+// gets profile for userId or return empty model if doesn't exist.
+func getExistingOrEmptyProfile(db *db.AuthDb, tenant, userId string) (*models.LoginModel, *models.ProfileModel) {
+	profile := &models.ProfileModel{}
+	loginInfo := &models.LoginModel{}
+
+	profileResChan, profileErrorChan := db.Profile(tenant).FindOneById(userId)
+	loginInfoChan, loginErrorChan := db.Login(tenant).FindOneById(userId)
+
+	// in case of error, return empty profile.
+	select {
+	case profileRes := <-profileResChan:
+		profile = profileRes
+	case <-profileErrorChan:
+		logger.Error("Failed getting profile", zap.String("userId", userId), zap.String("tenant", tenant))
+	}
+
+	select {
+	case loginRes := <-loginInfoChan:
+		loginInfo = loginRes
+	case <-loginErrorChan:
+		logger.Error("Failed getting login info", zap.String("userId", userId), zap.String("tenant", tenant))
+	}
+
+	return loginInfo, profile
+}
+
+func getProfileProto(loginModel *models.LoginModel, profileModel *models.ProfileModel) *pb.UserProfileProto {
+	result := &pb.UserProfileProto{}
+	copier.Copy(result, profileModel)
+	copier.CopyWithOption(result, loginModel, copier.Option{IgnoreEmpty: true})
+
+	// serialize metadata map.
+	metadataString, err := json.Marshal(profileModel.MetadataMap)
+	if err != nil {
+		logger.Error("Failed serializing metadata json", zap.Any("MetadataMap", profileModel.MetadataMap))
+	}
+
+	result.MetaDataMap = string(metadataString)
+	return result
 }
