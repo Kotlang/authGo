@@ -4,6 +4,7 @@ import (
 	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
 )
 
@@ -44,4 +45,8 @@ func (t *LoginRepository) FindOneByPhone(phone string) chan *models.LoginModel {
 		}
 	}()
 	return ch
+}
+
+func (t *LoginRepository) FindByIds(ids []string) (chan []models.LoginModel, chan error) {
+	return t.Find(bson.M{"_id": bson.M{"$in": ids}}, nil, int64(len(ids)), 0)
 }

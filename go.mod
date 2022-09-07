@@ -1,6 +1,6 @@
 module github.com/Kotlang/authGo
 
-go 1.18
+go 1.19
 
 require (
 	github.com/SaiNageswarS/go-api-boot v0.1.19

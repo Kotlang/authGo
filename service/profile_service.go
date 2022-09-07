@@ -16,6 +16,8 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type ProfileService struct {
@@ -56,6 +58,46 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.GetProfileR
 	profileProto := getProfileProto(loginInfo, profile)
 
 	return profileProto, nil
+}
+
+func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGetProfileRequest) (*pb.BulkGetProfileResponse, error) {
+	_, tenant := auth.GetUserIdAndTenant(ctx)
+
+	profileResChan, profileErrorChan := s.db.Profile(tenant).FindByIds(req.UserIds)
+	loginInfoChan, loginErrorChan := s.db.Login(tenant).FindByIds(req.UserIds)
+
+	profileMap := make(map[string]models.ProfileModel)
+	loginMap := make(map[string]models.LoginModel)
+
+	select {
+	case profileRes := <-profileResChan:
+		for _, profile := range profileRes {
+			profileMap[profile.Id()] = profile
+		}
+	case err := <-profileErrorChan:
+		logger.Error("Failed getting profile", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profiles")
+	}
+
+	select {
+	case loginRes := <-loginInfoChan:
+		for _, login := range loginRes {
+			loginMap[login.Id()] = login
+		}
+	case err := <-loginErrorChan:
+		logger.Error("Failed getting login info", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login info")
+	}
+
+	profileProtoList := make([]*pb.UserProfileProto, 0)
+	for _, userId := range req.UserIds {
+		loginInfo, profile := loginMap[userId], profileMap[userId]
+		profileProtoList = append(profileProtoList, getProfileProto(&loginInfo, &profile))
+	}
+
+	return &pb.BulkGetProfileResponse{
+		Profiles: profileProtoList,
+	}, nil
 }
 
 func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.ProfileImageUploadRequest) (*pb.ProfileImageUploadURL, error) {
@@ -153,6 +195,11 @@ func getExistingOrEmptyProfile(db *db.AuthDb, tenant, userId string) (*models.Lo
 
 func getProfileProto(loginModel *models.LoginModel, profileModel *models.ProfileModel) *pb.UserProfileProto {
 	result := &pb.UserProfileProto{}
+
+	if profileModel == nil {
+		return result
+	}
+
 	copier.Copy(result, profileModel)
 	copier.CopyWithOption(result, loginModel, copier.Option{IgnoreEmpty: true})
 
