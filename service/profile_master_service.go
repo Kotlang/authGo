@@ -37,11 +37,7 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.Get
 
 	select {
 	case profileMasterList := <-profileMasterListChan:
-		for _, profileMaster := range profileMasterList {
-			result := &pb.ProfileMasterProto{}
-			copier.Copy(result, profileMaster)
-			list = append(list, result)
-		}
+		copier.CopyWithOption(&list, &profileMasterList, copier.Option{DeepCopy: true})
 		return &pb.ProfileMasterResponse{
 			ProfileMasterList: list,
 		}, nil
