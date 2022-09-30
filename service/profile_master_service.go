@@ -7,6 +7,7 @@ import (
 	pb "github.com/Kotlang/authGo/generated"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/jinzhu/copier"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,17 +32,15 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.Get
 		language = "english"
 	}
 
-	profileMasterListChan, profileMasterListErrorChan := s.db.ProfileMaster(tenant).FindByLanguage(req.Language)
+	profileMasterListChan, profileMasterListErrorChan := s.db.ProfileMaster(tenant).FindByLanguage(language)
 	list := make([]*pb.ProfileMasterProto, 0)
 
 	select {
 	case profileMasterList := <-profileMasterListChan:
 		for _, profileMaster := range profileMasterList {
-			list = append(list, &pb.ProfileMasterProto{
-				Field:   profileMaster.Field,
-				Type:    profileMaster.Type,
-				Options: profileMaster.Options,
-			})
+			result := &pb.ProfileMasterProto{}
+			copier.Copy(result, profileMaster)
+			list = append(list, result)
 		}
 		return &pb.ProfileMasterResponse{
 			ProfileMasterList: list,
