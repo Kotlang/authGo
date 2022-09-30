@@ -28,7 +28,7 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.Get
 
 	language := req.Language
 	if language == "" {
-		return nil, status.Error(codes.InvalidArgument, "Language not specified")
+		language = "english"
 	}
 
 	profileMasterListChan, profileMasterListErrorChan := s.db.ProfileMaster(tenant).FindByLanguage(req.Language)
