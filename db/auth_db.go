@@ -31,3 +31,12 @@ func (a *AuthDb) Tenant() *TenantRepository {
 	}
 	return &TenantRepository{baseRepo}
 }
+
+func (a *AuthDb) ProfileMaster(tenant string) *ProfileMasterRepository {
+	baseRepo := odm.AbstractRepository[models.ProfileMasterModel]{
+		Database:       tenant + "_auth",
+		CollectionName: "profile_master",
+	}
+
+	return &ProfileMasterRepository{baseRepo}
+}
