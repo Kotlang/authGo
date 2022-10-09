@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
@@ -28,7 +29,7 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.Get
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
 	language := req.Language
-	if language == "" {
+	if len(strings.TrimSpace(language)) == 0 {
 		language = "english"
 	}
 
