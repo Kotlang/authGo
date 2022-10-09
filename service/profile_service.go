@@ -36,6 +36,10 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 
 	loginInfo, oldProfile := getExistingOrEmptyProfile(s.db, tenant, userId)
 
+	if len(oldProfile.LoginId) == 0 {
+		oldProfile.LoginId = userId
+	}
+
 	// merge old profile and new profile
 	newMetadata := copyAll(oldProfile.MetadataMap, getMapFromJson(req.MetaDataMap))
 	copier.CopyWithOption(oldProfile, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
