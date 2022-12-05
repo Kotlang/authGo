@@ -66,3 +66,27 @@ func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *pb
 		return nil, status.Error(codes.Internal, "Failed bulk getting profile master list")
 	}
 }
+
+// Delete Profile Master
+func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *pb.DeleteProfileMasterRequest) (*pb.DeleteProfileMasterResponse, error) {
+	_, tenant := auth.GetUserIdAndTenant(ctx)
+
+	profileMasterChan, errChan := s.db.ProfileMaster(tenant).FindOneById(req.Id)
+
+	select {
+	case profileMaster := <-profileMasterChan:
+		err := <-s.db.ProfileMaster(tenant).DeleteById(profileMaster.Id())
+
+		if err != nil {
+			logger.Error("Internal error when deleting profile master with id "+req.Id, zap.Error(err))
+			return nil, status.Error(codes.Internal, err.Error())
+		} else {
+			return &pb.DeleteProfileMasterResponse{
+				Status: "success",
+			}, nil
+		}
+	case err := <-errChan:
+		logger.Error("Profile master not found", zap.Error(err))
+		return nil, status.Error(codes.NotFound, "Profile master not found")
+	}
+}

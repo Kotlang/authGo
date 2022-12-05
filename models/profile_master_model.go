@@ -1,7 +1,5 @@
 package models
 
-import "encoding/base64"
-
 type ProfileMasterModel struct {
 	Language string   `bson:"language"`
 	Field    string   `bson:"field"`
@@ -10,5 +8,5 @@ type ProfileMasterModel struct {
 }
 
 func (m *ProfileMasterModel) Id() string {
-	return base64.StdEncoding.EncodeToString([]byte(m.Language + "/" + m.Field))
+	return m.Language + "/" + m.Field
 }
