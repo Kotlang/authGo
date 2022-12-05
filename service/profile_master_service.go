@@ -6,6 +6,7 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
+	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
@@ -78,7 +79,7 @@ func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *pb.
 		err := <-s.db.ProfileMaster(tenant).DeleteById(profileMaster.Id())
 
 		if err != nil {
-			logger.Error("Internal error when deleting profile master with id "+req.Id, zap.Error(err))
+			logger.Error("Internal error when deleting Profile Master with id: "+req.Id, zap.Error(err))
 			return nil, status.Error(codes.Internal, err.Error())
 		} else {
 			return &pb.DeleteProfileMasterResponse{
@@ -86,7 +87,36 @@ func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *pb.
 			}, nil
 		}
 	case err := <-errChan:
-		logger.Error("Profile master not found", zap.Error(err))
-		return nil, status.Error(codes.NotFound, "Profile master not found")
+		logger.Error("Profile Master not found", zap.Error(err))
+		return nil, status.Error(codes.NotFound, "Profile Master not found")
+	}
+}
+
+// Add Profile Master
+func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *pb.AddProfileMasterRequest) (*pb.ProfileMasterProto, error) {
+	_, tenant := auth.GetUserIdAndTenant(ctx)
+	if len(strings.TrimSpace(req.Language)) == 0 {
+		logger.Error("Language is not present")
+		return nil, status.Error(codes.InvalidArgument, "Language is not present")
+	}
+	profileMaster := &models.ProfileMasterModel{}
+	copier.CopyWithOption(profileMaster, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
+
+	err := <-s.db.ProfileMaster(tenant).Save(profileMaster)
+
+	if err != nil {
+		logger.Error("Internal error when saving Profile Master with id: "+profileMaster.Id(), zap.Error(err))
+		return nil, status.Error(codes.Internal, err.Error())
+	} else {
+		profileMasterChan, errChan := s.db.ProfileMaster(tenant).FindOneById(profileMaster.Id())
+		select {
+		case profileMaster := <-profileMasterChan:
+			profileMasterProto := &pb.ProfileMasterProto{}
+			copier.Copy(profileMasterProto, profileMaster)
+			return profileMasterProto, nil
+		case err := <-errChan:
+			logger.Error("After saving, the Profile Master not found", zap.Error(err))
+			return nil, status.Error(codes.NotFound, "After saving, the Profile Master not found")
+		}
 	}
 }
