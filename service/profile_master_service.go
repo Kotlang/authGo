@@ -120,3 +120,28 @@ func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *pb.Add
 		}
 	}
 }
+
+// Update Profile Master
+func (s *ProfileMasterService) UpdateProfileMaster(ctx context.Context, req *pb.ProfileMasterProto) (*pb.ProfileMasterProto, error) {
+	_, tenant := auth.GetUserIdAndTenant(ctx)
+
+	profileMasterChan, errChain := s.db.ProfileMaster(tenant).FindOneById(req.Id)
+
+	select {
+	case profileMaster := <-profileMasterChan:
+		copier.CopyWithOption(profileMaster, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
+		profileMaster.Options = req.Options
+		err := <-s.db.ProfileMaster(tenant).Save(profileMaster)
+		if err != nil {
+			logger.Error("Internal error when saving Profile Master with id: "+profileMaster.Id(), zap.Error(err))
+			return nil, status.Error(codes.Internal, err.Error())
+		} else {
+			profileMasterProto := &pb.ProfileMasterProto{}
+			copier.Copy(profileMasterProto, profileMaster)
+			return profileMasterProto, nil
+		}
+	case err := <-errChain:
+		logger.Error("Can't update Profile Master not found with id: "+req.Id, zap.Error(err))
+		return nil, status.Error(codes.NotFound, "Can't update Profile Master not found with id: "+req.Id)
+	}
+}
