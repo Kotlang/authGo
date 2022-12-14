@@ -57,49 +57,6 @@ jobs:
 
       - name: Push image
         run: |
-          docker push sainageswar/$IMAGE_NAME:$IMAGE_TAG
-
-  deploy-service:
-    needs: build-service
-    runs-on: ubuntu-latest
-
-    steps:
-      # Required for getting 'kubernetes/*.yml' file.
-      - uses: actions/checkout@v2
-
-      - uses: azure/setup-kubectl@v2.0
-
-      - name: Set aks context
-        uses: azure/aks-set-context@v1
-        with:
-          creds: "${{ secrets.AZURE_CREDENTIALS }}"
-          cluster-name: KotlangCluster
-          resource-group: kotlang
-
-      - name: Set k8s secrets
-        uses: azure/k8s-create-secret@v1.1
-        with:
-          namespace: "default"
-          secret-type: "generic"
-          arguments: --from-literal=tenantId=${{ secrets.AZURE_TENANT_ID }} --from-literal=clientId=${{ secrets.AZURE_CLIENT_ID }} --from-literal=clientSecret=${{ secrets.AZURE_CLIENT_SECRET }}
-          secret-name: azure-ad
-
-      - name: Set ACR credentials
-        uses: Azure/k8s-create-secret@v1.1
-        with:
-          container-registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
-          container-registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
-          secret-name: registry-credentials
-
-      #- name: AKS Deploy
-      #  uses: azure/k8s-deploy@v1.4
-      #  with:
-      #    action: deploy
-      #    manifests: |
-      #      kubernetes/deployment.yml
-      #      kubernetes/service.yml
-      #    images: |
-      #      sainageswar/$IMAGE_NAME:$IMAGE_TAG
-      #    namespace: default
-      #    imagepullsecrets: |
-      #      registry-credentials
+          if [ "${{ github.ref }}" == "refs/heads/master" ]; then
+            docker push sainageswar/$IMAGE_NAME:$IMAGE_TAG
+          fi
