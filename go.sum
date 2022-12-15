@@ -75,6 +75,8 @@ github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAE
 github.com/OpenPeeDeeP/depguard v1.0.1/go.mod h1:xsIw86fROiiwelg+jB2uM9PiKihMMmUx/1V+TNhjQvM=
 github.com/SaiNageswarS/go-api-boot v0.1.19 h1:JuvnHried1jxAlxyFA9ozoF7eWJK+D23XFSS00q6gIQ=
 github.com/SaiNageswarS/go-api-boot v0.1.19/go.mod h1:uW69Cvs0Hm4EMA9m0KU9P6zKNZjAYpdOTq7+AEN6FEE=
+github.com/SaiNageswarS/go-api-boot v0.1.21 h1:knxQIlIKtmi0Ikc2xlXY3GvKSsmUyoBHIiMhv5IoW38=
+github.com/SaiNageswarS/go-api-boot v0.1.21/go.mod h1:uW69Cvs0Hm4EMA9m0KU9P6zKNZjAYpdOTq7+AEN6FEE=
 github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
