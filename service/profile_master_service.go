@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/Kotlang/authGo/db"
@@ -50,8 +51,21 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.Get
 	}
 }
 
+// ADMIN PORTAL API
 func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *pb.BulkGetProfileMasterRequest) (*pb.ProfileMasterResponse, error) {
-	_, tenant := auth.GetUserIdAndTenant(ctx)
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
+	select {
+	case loginModel := <-loginModelChan:
+		fmt.Println(loginModel.Phone)
+		if loginModel.UserType != "admin" {
+			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
+	}
 
 	profileMasterListChan, profileMasterListErrorChan := s.db.ProfileMaster(tenant).Find(bson.M{}, nil, 0, 0)
 	list := make([]*pb.ProfileMasterProto, 0)
@@ -68,9 +82,21 @@ func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *pb
 	}
 }
 
+// ADMIN PORTAL API
 // Delete Profile Master
 func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *pb.DeleteProfileMasterRequest) (*pb.DeleteProfileMasterResponse, error) {
-	_, tenant := auth.GetUserIdAndTenant(ctx)
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
+	select {
+	case loginModel := <-loginModelChan:
+		if loginModel.UserType != "admin" {
+			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
+	}
 
 	profileMasterChan, errChan := s.db.ProfileMaster(tenant).FindOneById(req.Id)
 
@@ -92,9 +118,22 @@ func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *pb.
 	}
 }
 
+// ADMIN PORTAL API
 // Add Profile Master
 func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *pb.AddProfileMasterRequest) (*pb.ProfileMasterProto, error) {
-	_, tenant := auth.GetUserIdAndTenant(ctx)
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
+	select {
+	case loginModel := <-loginModelChan:
+		if loginModel.UserType != "admin" {
+			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
+	}
+
 	if len(strings.TrimSpace(req.Language)) == 0 {
 		logger.Error("Language is not present")
 		return nil, status.Error(codes.InvalidArgument, "Language is not present")
@@ -121,9 +160,21 @@ func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *pb.Add
 	}
 }
 
+// ADMIN PORTAL API
 // Update Profile Master
 func (s *ProfileMasterService) UpdateProfileMaster(ctx context.Context, req *pb.ProfileMasterProto) (*pb.ProfileMasterProto, error) {
-	_, tenant := auth.GetUserIdAndTenant(ctx)
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
+	select {
+	case loginModel := <-loginModelChan:
+		if loginModel.UserType != "admin" {
+			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
+	}
 
 	profileMasterChan, errChain := s.db.ProfileMaster(tenant).FindOneById(req.Id)
 
