@@ -43,6 +43,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	// merge old profile and new profile
 	newMetadata := copyAll(oldProfile.MetadataMap, getMapFromJson(req.MetaDataMap))
 	copier.CopyWithOption(oldProfile, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
+	oldProfile.Gender = pb.Gender_name[int32(req.Gender)]
 	oldProfile.MetadataMap = newMetadata
 
 	err := <-s.db.Profile(tenant).Save(oldProfile)
@@ -206,7 +207,7 @@ func getProfileProto(loginModel *models.LoginModel, profileModel *models.Profile
 
 	copier.Copy(result, profileModel)
 	copier.CopyWithOption(result, loginModel, copier.Option{IgnoreEmpty: true})
-
+	result.Gender = pb.Gender(pb.Gender_value[profileModel.Gender])
 	// serialize metadata map.
 	metadataString, err := json.Marshal(profileModel.MetadataMap)
 	if err != nil {
