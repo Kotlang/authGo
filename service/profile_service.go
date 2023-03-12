@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/Kotlang/authGo/db"
@@ -166,9 +167,41 @@ func copyAll(oldMap, newMap map[string]interface{}) map[string]interface{} {
 	return oldMap
 }
 
-func getMapFromJson(jsonStr string) map[string]interface{} {
-	var result map[string]interface{}
-	json.Unmarshal([]byte(jsonStr), &result)
+func getMapFromJson(metadata []*pb.ProfileMetaData) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	getData := func(value string, dataType pb.DataType) interface{} {
+		switch dataType {
+		case pb.DataType_boolean:
+			v, err := strconv.ParseBool(value)
+			if err != nil {
+				return v
+			} else {
+				return false
+			}
+		case pb.DataType_double:
+			v, err := strconv.ParseFloat(value, 64)
+			if err != nil {
+				return v
+			} else {
+				return false
+			}
+		case pb.DataType_int:
+			v, err := strconv.ParseInt(value, 10, 32)
+			if err != nil {
+				return v
+			} else {
+				return false
+			}
+		default:
+			return value
+		}
+	}
+
+	for _, meta := range metadata {
+		result[meta.Field] = getData(meta.Value, meta.Type)
+	}
+
 	return result
 }
 
