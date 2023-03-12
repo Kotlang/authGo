@@ -32,6 +32,11 @@ func NewProfileService(db *db.AuthDb) *ProfileService {
 }
 
 func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.CreateProfileRequest) (*pb.UserProfileProto, error) {
+	err := ValidateProfileRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	loginInfo, oldProfile := getExistingOrEmptyProfile(s.db, tenant, userId)
@@ -46,7 +51,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	oldProfile.Gender = pb.Gender_name[int32(req.Gender)]
 	oldProfile.MetadataMap = newMetadata
 
-	err := <-s.db.Profile(tenant).Save(oldProfile)
+	err = <-s.db.Profile(tenant).Save(oldProfile)
 
 	userProfileProto := getProfileProto(loginInfo, oldProfile)
 	return userProfileProto, err
@@ -128,20 +133,31 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.P
 func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImageServer) error {
 	userId, tenant := auth.GetUserIdAndTenant(stream.Context())
 	logger.Info("Uploading image", zap.String("userId", userId), zap.String("tenant", tenant))
-	imageData, err := bootUtils.BufferGrpcServerStream(stream, func() ([]byte, error) {
-		req, err := stream.Recv()
-		if err != nil {
-			return nil, err
-		}
-		return req.ChunkData, nil
-	})
+	acceptableMimeTypes := []string{"image/jpeg", "image/png"}
+
+	imageData, contentType, err := bootUtils.BufferGrpcServerStream(
+		acceptableMimeTypes,
+		5*1024*1024, // 5mb max file size.
+		func() ([]byte, error) {
+			err := bootUtils.StreamContextError(stream.Context())
+			if err != nil {
+				return nil, err
+			}
+
+			req, err := stream.Recv()
+			if err != nil {
+				return nil, err
+			}
+			return req.ChunkData, nil
+		})
 	if err != nil {
 		logger.Error("Failed uploading image", zap.Error(err))
 		return err
 	}
 
+	file_extension := bootUtils.GetFileExtension(contentType)
 	// upload imageData to Azure bucket.
-	path := fmt.Sprintf("%s/%s/%d.jpg", tenant, userId, time.Now().Unix())
+	path := fmt.Sprintf("%s/%s/%d.%s", tenant, userId, time.Now().Unix(), file_extension)
 	resultChan, errorChan := azure.Storage.UploadStream("profile-photos", path, imageData)
 
 	select {

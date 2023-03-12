@@ -3,7 +3,7 @@ module github.com/Kotlang/authGo
 go 1.19
 
 require (
-	github.com/SaiNageswarS/go-api-boot v0.1.22
+	github.com/SaiNageswarS/go-api-boot v0.1.25
 	github.com/jinzhu/copier v0.3.2
 	github.com/twilio/twilio-go v0.9.0
 	go.mongodb.org/mongo-driver v1.7.2
@@ -56,9 +56,10 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	golang.org/x/crypto v0.0.0-20220511200225-c6db032c6c88 // indirect
+	golang.org/x/exp v0.0.0-20230310171629-522b1b587ee0 // indirect
 	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
+	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/genproto v0.0.0-20200707001353-8e8330bf89df // indirect
 	nhooyr.io/websocket v1.8.7 // indirect
