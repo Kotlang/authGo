@@ -139,7 +139,7 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 		acceptableMimeTypes,
 		5*1024*1024, // 5mb max file size.
 		func() ([]byte, error) {
-			err := contextError(stream.Context())
+			err := bootUtils.StreamContextError(stream.Context())
 			if err != nil {
 				return nil, err
 			}
@@ -155,7 +155,7 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 		return err
 	}
 
-	file_extension := getFileExtension(contentType)
+	file_extension := bootUtils.GetFileExtension(contentType)
 	// upload imageData to Azure bucket.
 	path := fmt.Sprintf("%s/%s/%d.%s", tenant, userId, time.Now().Unix(), file_extension)
 	resultChan, errorChan := azure.Storage.UploadStream("profile-photos", path, imageData)
@@ -232,24 +232,4 @@ func getProfileProto(loginModel *models.LoginModel, profileModel *models.Profile
 
 	result.MetaDataMap = string(metadataString)
 	return result
-}
-
-func getFileExtension(mimeType string) string {
-	fileExtensionMapping := map[string]string{
-		"image/jpeg": "jpg",
-		"image/png":  "png",
-	}
-
-	return fileExtensionMapping[mimeType]
-}
-
-func contextError(ctx context.Context) error {
-	switch ctx.Err() {
-	case context.Canceled:
-		return status.Error(codes.Canceled, "request is canceled")
-	case context.DeadlineExceeded:
-		return status.Error(codes.DeadlineExceeded, "deadline is exceeded")
-	default:
-		return nil
-	}
 }
