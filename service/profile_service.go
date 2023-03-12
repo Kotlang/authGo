@@ -136,10 +136,14 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 	acceptableMimeTypes := []string{"image/jpeg", "image/png"}
 
 	imageData, contentType, err := bootUtils.BufferGrpcServerStream(
-		stream,
 		acceptableMimeTypes,
 		5*1024*1024, // 5mb max file size.
 		func() ([]byte, error) {
+			err := contextError(stream.Context())
+			if err != nil {
+				return nil, err
+			}
+
 			req, err := stream.Recv()
 			if err != nil {
 				return nil, err
@@ -237,4 +241,15 @@ func getFileExtension(mimeType string) string {
 	}
 
 	return fileExtensionMapping[mimeType]
+}
+
+func contextError(ctx context.Context) error {
+	switch ctx.Err() {
+	case context.Canceled:
+		return status.Error(codes.Canceled, "request is canceled")
+	case context.DeadlineExceeded:
+		return status.Error(codes.DeadlineExceeded, "deadline is exceeded")
+	default:
+		return nil
+	}
 }

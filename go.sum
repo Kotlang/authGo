@@ -73,8 +73,8 @@ github.com/Masterminds/sprig v2.15.0+incompatible/go.mod h1:y6hNFY5UBTIWBxnzTeuN
 github.com/Masterminds/sprig v2.22.0+incompatible/go.mod h1:y6hNFY5UBTIWBxnzTeuNhlNS5hqE0NB0E6fgfo2Br3o=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/OpenPeeDeeP/depguard v1.0.1/go.mod h1:xsIw86fROiiwelg+jB2uM9PiKihMMmUx/1V+TNhjQvM=
-github.com/SaiNageswarS/go-api-boot v0.1.23 h1:rCXc560VaA3PZeNDtKr2PD4p1mNdzS/r4bUVz80AtWU=
-github.com/SaiNageswarS/go-api-boot v0.1.23/go.mod h1:XFvXeohrOFeSDiwWhPR40p3iuX/vuSUZsftUxt4st0M=
+github.com/SaiNageswarS/go-api-boot v0.1.24 h1:mn4jfD/m05qVeZogH0/7iQVdnGmcAIwnlvKBFyweQEg=
+github.com/SaiNageswarS/go-api-boot v0.1.24/go.mod h1:XFvXeohrOFeSDiwWhPR40p3iuX/vuSUZsftUxt4st0M=
 github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=

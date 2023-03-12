@@ -3,7 +3,7 @@ module github.com/Kotlang/authGo
 go 1.19
 
 require (
-	github.com/SaiNageswarS/go-api-boot v0.1.23
+	github.com/SaiNageswarS/go-api-boot v0.1.24
 	github.com/jinzhu/copier v0.3.2
 	github.com/twilio/twilio-go v0.9.0
 	go.mongodb.org/mongo-driver v1.7.2
