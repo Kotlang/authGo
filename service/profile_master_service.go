@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
@@ -48,6 +49,29 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.Get
 	case err := <-profileMasterListErrorChan:
 		logger.Error("Failed getting profile master list", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profile master list")
+	}
+}
+
+func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *pb.GetLanguagesRequest) (*pb.LanguagesResponse, error) {
+	_, tenant := auth.GetUserIdAndTenant(ctx)
+
+	distinctLanguagesChan, distinctLanguagesErrorChan := s.db.ProfileMaster(tenant).Distinct("language", bson.D{}, 2*time.Second)
+	list := make([]string, 0)
+
+	select {
+	case distinctLanguages := <-distinctLanguagesChan:
+		for _, value := range distinctLanguages {
+			res, ok := value.(string)
+			if ok {
+				list = append(list, res)
+			}
+		}
+		return &pb.LanguagesResponse{
+			Languages: list,
+		}, nil
+	case err := <-distinctLanguagesErrorChan:
+		logger.Error("Failed getting distinct languages", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting distinct languages")
 	}
 }
 
