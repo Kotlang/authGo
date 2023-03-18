@@ -50,12 +50,15 @@ func (c *PhoneClient) SendOtp(phoneNumber string) {
 	logger.Info("Sending otp status", zap.String("status", *res.Status))
 }
 
-func (c *PhoneClient) CreateLoginInfo(tenant, phoneNumber string) {
+func (c *PhoneClient) SaveLoginInfo(tenant, phoneNumber string, LastOtpSentTime int64) *models.LoginModel {
 	loginInfo := &models.LoginModel{
-		Phone:    phoneNumber,
-		UserType: "default",
+		Phone:           phoneNumber,
+		UserType:        "default",
+		LastOtpSentTime: LastOtpSentTime,
 	}
 	<-c.Db.Login(tenant).Save(loginInfo)
+
+	return loginInfo
 }
 
 func (c *PhoneClient) GetLoginInfo(tenant, to string) *models.LoginModel {

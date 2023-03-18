@@ -30,7 +30,7 @@ func NewLoginService(
 	}
 }
 
-//removing auth interceptor
+// removing auth interceptor
 func (u *LoginService) AuthFuncOverride(ctx context.Context, fullMethodName string) (context.Context, error) {
 	return ctx, nil
 }
@@ -44,7 +44,12 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 	if tenantDetails == nil {
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
 	}
-	s.otp.SendOtp(tenantDetails.Name, req.EmailOrPhone)
+
+	err := s.otp.SendOtp(tenantDetails.Name, req.EmailOrPhone)
+	if err != nil {
+		return nil, err
+	}
+
 	return &pb.StatusResponse{Status: "success"}, nil
 }
 

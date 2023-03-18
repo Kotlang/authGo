@@ -1,15 +1,19 @@
 package otp
 
 import (
+	"time"
+
 	"github.com/Kotlang/authGo/db"
 	"github.com/Kotlang/authGo/models"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Channel interface {
 	IsValid(to string) bool
 	SendOtp(to string)
 	GetLoginInfo(tenant, to string) *models.LoginModel
-	CreateLoginInfo(tenant, emailOrPhone string)
+	SaveLoginInfo(tenant, emailOrPhone string, LastOtpSentTime int64) *models.LoginModel
 	Verify(to, otp string) bool
 }
 
@@ -25,19 +29,27 @@ func NewOtpClient(db *db.AuthDb) *OtpClient {
 	}
 }
 
-func (c *OtpClient) SendOtp(tenant, to string) {
+func (c *OtpClient) SendOtp(tenant, to string) error {
 	for _, channel := range c.channels {
 		if channel.IsValid(to) {
 			// create user if doesn't exist.
 			loginInfo := channel.GetLoginInfo(tenant, to)
 			if loginInfo == nil {
-				channel.CreateLoginInfo(tenant, to)
+				loginInfo = channel.SaveLoginInfo(tenant, to, 0)
+			}
+
+			now := time.Now().Unix()
+			if (now - loginInfo.LastOtpSentTime) < 60 {
+				return status.Error(codes.PermissionDenied, "Exceeded threshold of OTPs in a minute.")
 			}
 
 			// send otp through the channel.
 			channel.SendOtp(to)
+			channel.SaveLoginInfo(tenant, to, now)
 		}
 	}
+
+	return nil
 }
 
 func (c *OtpClient) GetLoginInfo(tenant, to string) *models.LoginModel {
