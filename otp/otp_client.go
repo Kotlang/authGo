@@ -13,7 +13,7 @@ type Channel interface {
 	IsValid(to string) bool
 	SendOtp(to string)
 	GetLoginInfo(tenant, to string) *models.LoginModel
-	SaveLoginInfo(tenant, emailOrPhone string, LastOtpSentTime int64, loginInfo *models.LoginModel) *models.LoginModel
+	SaveLoginInfo(tenant, emailOrPhone string, LastOtpSentTime int64, userType string) *models.LoginModel
 	Verify(to, otp string) bool
 }
 
@@ -35,7 +35,7 @@ func (c *OtpClient) SendOtp(tenant, to string) error {
 			// create user if doesn't exist.
 			loginInfo := channel.GetLoginInfo(tenant, to)
 			if loginInfo == nil {
-				loginInfo = channel.SaveLoginInfo(tenant, to, 0, loginInfo)
+				loginInfo = channel.SaveLoginInfo(tenant, to, 0, "default")
 			}
 
 			now := time.Now().Unix()
@@ -45,7 +45,7 @@ func (c *OtpClient) SendOtp(tenant, to string) error {
 
 			// send otp through the channel.
 			channel.SendOtp(to)
-			channel.SaveLoginInfo(tenant, to, now, loginInfo)
+			channel.SaveLoginInfo(tenant, to, now, loginInfo.UserType)
 		}
 	}
 

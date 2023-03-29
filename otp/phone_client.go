@@ -2,6 +2,7 @@ package otp
 
 import (
 	"os"
+	"strings"
 	"unicode"
 
 	"github.com/Kotlang/authGo/db"
@@ -50,16 +51,19 @@ func (c *PhoneClient) SendOtp(phoneNumber string) {
 	logger.Info("Sending otp status", zap.String("status", *res.Status))
 }
 
-func (c *PhoneClient) SaveLoginInfo(tenant, phoneNumber string, LastOtpSentTime int64, loginInfo *models.LoginModel) *models.LoginModel {
-	if loginInfo == nil {
-		loginInfo = &models.LoginModel{
-			Phone:           phoneNumber,
-			UserType:        "default",
-			LastOtpSentTime: LastOtpSentTime,
-		}
-	} else {
-		loginInfo.LastOtpSentTime = LastOtpSentTime
+func (c *PhoneClient) SaveLoginInfo(tenant, phoneNumber string, LastOtpSentTime int64, userType string) *models.LoginModel {
+	userType = strings.TrimSpace(userType)
+
+	if len(userType) == 0 {
+		userType = "default"
 	}
+
+	loginInfo := &models.LoginModel{
+		Phone:           phoneNumber,
+		UserType:        userType,
+		LastOtpSentTime: LastOtpSentTime,
+	}
+
 	<-c.Db.Login(tenant).Save(loginInfo)
 
 	return loginInfo
