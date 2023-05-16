@@ -11,9 +11,10 @@ type Inject struct {
 
 	Otp *otp.OtpClient
 
-	LoginService         *service.LoginService
-	ProfileService       *service.ProfileService
-	ProfileMasterService *service.ProfileMasterService
+	LoginService          *service.LoginService
+	ProfileService        *service.ProfileService
+	ProfileMasterService  *service.ProfileMasterService
+	DeviceInstanceService *service.DeviceInstanceService
 }
 
 func NewInject() *Inject {
@@ -25,6 +26,7 @@ func NewInject() *Inject {
 	inj.LoginService = service.NewLoginService(inj.AuthDb, inj.Otp)
 	inj.ProfileService = service.NewProfileService(inj.AuthDb)
 	inj.ProfileMasterService = service.NewProfileMasterService(inj.AuthDb)
+	inj.DeviceInstanceService = service.NewDeviceInstanceService(inj.AuthDb)
 
 	return inj
 }
