@@ -10,7 +10,7 @@ type LoginModel struct {
 	Otp             string `bson:"otp"`
 	UserType        string `bson:"userType"`
 	LastOtpSentTime int64  `bson:"lastOtpSentTime"`
-	CreatedOn       int64  `bson:"createdOn"`
+	CreatedOn       int64  `bson:"createdOn,omitempty"`
 }
 
 func (m *LoginModel) Id() string {
