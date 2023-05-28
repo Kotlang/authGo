@@ -13,7 +13,7 @@ type Channel interface {
 	IsValid(to string) bool
 	SendOtp(to string)
 	GetLoginInfo(tenant, to string) *models.LoginModel
-	SaveLoginInfo(tenant, emailOrPhone string, LastOtpSentTime int64, userType string) *models.LoginModel
+	SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel
 	Verify(to, otp string) bool
 }
 
@@ -32,20 +32,18 @@ func NewOtpClient(db *db.AuthDb) *OtpClient {
 func (c *OtpClient) SendOtp(tenant, to string) error {
 	for _, channel := range c.channels {
 		if channel.IsValid(to) {
-			// create user if doesn't exist.
-			loginInfo := channel.GetLoginInfo(tenant, to)
-			if loginInfo == nil {
-				loginInfo = channel.SaveLoginInfo(tenant, to, 0, "default")
-			}
-
 			now := time.Now().Unix()
-			if (now - loginInfo.LastOtpSentTime) < 60 {
+			// get login info from db or default info.
+			loginInfo := channel.GetLoginInfo(tenant, to)
+			if loginInfo.CreatedOn != 0 && (now-loginInfo.LastOtpSentTime) < 60 {
 				return status.Error(codes.PermissionDenied, "Exceeded threshold of OTPs in a minute.")
 			}
 
+			loginInfo.LastOtpSentTime = now
+
 			// send otp through the channel.
 			channel.SendOtp(to)
-			channel.SaveLoginInfo(tenant, to, now, loginInfo.UserType)
+			channel.SaveLoginInfo(tenant, loginInfo)
 		}
 	}
 

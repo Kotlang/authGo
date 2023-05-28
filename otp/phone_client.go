@@ -51,17 +51,11 @@ func (c *PhoneClient) SendOtp(phoneNumber string) {
 	logger.Info("Sending otp status", zap.String("status", *res.Status))
 }
 
-func (c *PhoneClient) SaveLoginInfo(tenant, phoneNumber string, LastOtpSentTime int64, userType string) *models.LoginModel {
-	userType = strings.TrimSpace(userType)
+func (c *PhoneClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel {
+	userType := strings.TrimSpace(loginInfo.UserType)
 
 	if len(userType) == 0 {
-		userType = "default"
-	}
-
-	loginInfo := &models.LoginModel{
-		Phone:           phoneNumber,
-		UserType:        userType,
-		LastOtpSentTime: LastOtpSentTime,
+		loginInfo.UserType = "default"
 	}
 
 	<-c.Db.Login(tenant).Save(loginInfo)
@@ -69,8 +63,15 @@ func (c *PhoneClient) SaveLoginInfo(tenant, phoneNumber string, LastOtpSentTime 
 	return loginInfo
 }
 
-func (c *PhoneClient) GetLoginInfo(tenant, to string) *models.LoginModel {
-	return <-c.Db.Login(tenant).FindOneByPhone(to)
+func (c *PhoneClient) GetLoginInfo(tenant, phone string) *models.LoginModel {
+	loginInfo := <-c.Db.Login(tenant).FindOneByPhone(phone)
+	if loginInfo == nil {
+		loginInfo = &models.LoginModel{
+			Phone:    phone,
+			UserType: "default",
+		}
+	}
+	return loginInfo
 }
 
 func (c *PhoneClient) Verify(to, otp string) bool {
