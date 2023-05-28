@@ -21,17 +21,11 @@ func (c *EmailClient) SendOtp(emailId string) {
 	// TODO: Use twilio with send-grid to send otp to email.
 }
 
-func (c *EmailClient) SaveLoginInfo(tenant, emailId string, LastOtpSentTime int64, userType string) *models.LoginModel {
-	userType = strings.TrimSpace(userType)
+func (c *EmailClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel {
+	userType := strings.TrimSpace(loginInfo.UserType)
 
 	if len(userType) == 0 {
-		userType = "default"
-	}
-
-	loginInfo := &models.LoginModel{
-		Email:           emailId,
-		UserType:        userType,
-		LastOtpSentTime: LastOtpSentTime,
+		loginInfo.UserType = "default"
 	}
 
 	<-c.Db.Login(tenant).Save(loginInfo)
@@ -39,8 +33,15 @@ func (c *EmailClient) SaveLoginInfo(tenant, emailId string, LastOtpSentTime int6
 	return loginInfo
 }
 
-func (c *EmailClient) GetLoginInfo(tenant, emailId string) *models.LoginModel {
-	return <-c.Db.Login(tenant).FindOneByEmail(emailId)
+func (c *EmailClient) GetLoginInfo(tenant, email string) *models.LoginModel {
+	loginInfo := <-c.Db.Login(tenant).FindOneByEmail(email)
+	if loginInfo == nil {
+		loginInfo = &models.LoginModel{
+			Email:    email,
+			UserType: "default",
+		}
+	}
+	return loginInfo
 }
 
 func (c *EmailClient) Verify(to, otp string) bool {
