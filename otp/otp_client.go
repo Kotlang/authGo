@@ -63,7 +63,14 @@ func (c *OtpClient) GetLoginInfo(tenant, to string) *models.LoginModel {
 func (c *OtpClient) ValidateOtp(tenant, to, otp string) bool {
 	for _, channel := range c.channels {
 		if channel.IsValid(to) {
-			return channel.Verify(to, otp)
+			isValid := channel.Verify(to, otp)
+			if isValid {
+				loginInfo := channel.GetLoginInfo(tenant, to)
+				loginInfo.Otp = otp
+				loginInfo.OtpAuthenticatedTime = time.Now().Unix()
+				channel.SaveLoginInfo(tenant, loginInfo)
+			}
+			return isValid
 		}
 	}
 	return false
