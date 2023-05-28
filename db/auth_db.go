@@ -40,12 +40,3 @@ func (a *AuthDb) ProfileMaster(tenant string) *ProfileMasterRepository {
 
 	return &ProfileMasterRepository{baseRepo}
 }
-
-func (a *AuthDb) DeviceInstance(tenant string) *DeviceInstanceRepository {
-	baseRepo := odm.AbstractRepository[models.DeviceInstanceModel]{
-		Database:       tenant + "_auth",
-		CollectionName: "device_instance",
-	}
-
-	return &DeviceInstanceRepository{baseRepo}
-}
