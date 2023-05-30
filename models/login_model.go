@@ -5,12 +5,13 @@ import (
 )
 
 type LoginModel struct {
-	Email           string `bson:"email"`
-	Phone           string `bson:"phone"`
-	Otp             string `bson:"otp"`
-	UserType        string `bson:"userType"`
-	LastOtpSentTime int64  `bson:"lastOtpSentTime"`
-	CreatedOn       int64  `bson:"createdOn,omitempty"`
+	Email                string `bson:"email"`
+	Phone                string `bson:"phone"`
+	Otp                  string `bson:"otp"`
+	UserType             string `bson:"userType"`
+	LastOtpSentTime      int64  `bson:"lastOtpSentTime"`
+	OtpAuthenticatedTime int64  `bson:"otpAuthenticatedTime"`
+	CreatedOn            int64  `bson:"createdOn,omitempty"`
 }
 
 func (m *LoginModel) Id() string {
