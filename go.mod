@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/SaiNageswarS/go-api-boot v0.1.28
+	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/jinzhu/copier v0.3.2
 	github.com/twilio/twilio-go v0.9.0
 	go.mongodb.org/mongo-driver v1.11.3
@@ -36,7 +37,6 @@ require (
 	github.com/golang/protobuf v1.5.0 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/uuid v1.3.0 // indirect
-	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
 	github.com/improbable-eng/grpc-web v0.14.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect

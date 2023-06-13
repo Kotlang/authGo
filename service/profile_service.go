@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Kotlang/authGo/db"
+	"github.com/Kotlang/authGo/extensions"
 	pb "github.com/Kotlang/authGo/generated"
 	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
@@ -41,7 +42,9 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 
 	loginInfo, oldProfile := getExistingOrEmptyProfile(s.db, tenant, userId)
 
+	isNewUser := false
 	if len(oldProfile.LoginId) == 0 {
+		isNewUser = true
 		oldProfile.LoginId = userId
 	}
 
@@ -56,6 +59,17 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	oldProfile.MetadataMap = newMetadata
 
 	err = <-s.db.Profile(tenant).Save(oldProfile)
+
+	if isNewUser {
+		extensions.RegisterEvent(ctx, &pb.RegisterEventRequest{
+			EventType: "user.created",
+			TemplateParameters: map[string]string{
+				"userId": userId,
+				"body":   fmt.Sprintf("New user '%s' joined.", req.Name),
+			},
+			Topic: fmt.Sprintf("%s.user.created", tenant),
+		})
+	}
 
 	userProfileProto := getProfileProto(loginInfo, oldProfile)
 	return userProfileProto, err
