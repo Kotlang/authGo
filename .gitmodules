@@ -1,3 +1,6 @@
 [submodule "auth-model"]
 	path = auth-model
 	url = git@github.com:Kotlang/auth-model.git
+[submodule "notification-model"]
+	path = notification-model
+	url = https://github.com/Kotlang/notification-model.git
