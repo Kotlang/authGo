@@ -5,6 +5,7 @@ import (
 
 	pb "github.com/Kotlang/authGo/generated"
 	"github.com/SaiNageswarS/go-api-boot/server"
+	"github.com/rs/cors"
 )
 
 var grpcPort = ":50051"
@@ -16,7 +17,11 @@ func main() {
 	server.LoadSecretsIntoEnv(true)
 	inject := NewInject()
 
-	bootServer := server.NewGoApiBoot()
+	corsConfig := cors.New(
+		cors.Options{
+			AllowedHeaders: []string{"*"},
+		})
+	bootServer := server.NewGoApiBoot(corsConfig)
 	pb.RegisterLoginServer(bootServer.GrpcServer, inject.LoginService)
 	pb.RegisterProfileServer(bootServer.GrpcServer, inject.ProfileService)
 	pb.RegisterProfileMasterServer(bootServer.GrpcServer, inject.ProfileMasterService)
