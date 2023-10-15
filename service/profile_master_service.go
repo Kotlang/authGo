@@ -18,17 +18,26 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// ProfileMasterService is a struct that represents the service for managing user profiles.
+// It implements the ProfileMasterServer interface from the pb package.
+// It contains a pointer to an instance of AuthDb, which is used to interact with the database.
 type ProfileMasterService struct {
 	pb.UnimplementedProfileMasterServer
 	db *db.AuthDb
 }
 
+// NewProfileMasterService creates a new instance of the ProfileMasterService struct.
+// It takes an instance of the AuthDb struct as a parameter and returns a pointer to the ProfileMasterService struct.
+// This service is responsible for handling profile-related operations.
 func NewProfileMasterService(authDB *db.AuthDb) *ProfileMasterService {
 	return &ProfileMasterService{
 		db: authDB,
 	}
 }
 
+// GetProfileMaster retrieves a list of profile masters based on the given language.
+// If the language is not provided, it defaults to English.
+// It returns a list of profile masters and an error if the operation fails.
 func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.GetProfileMasterRequest) (*pb.ProfileMasterResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -52,6 +61,10 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.Get
 	}
 }
 
+// GetLanguages returns a list of distinct languages available in the profile master database for the given tenant.
+// The function takes a context and a GetLanguagesRequest as input and returns a LanguagesResponse and an error.
+// The LanguagesResponse contains a list of languages available in the database.
+// If the function encounters an error, it returns an error with an appropriate error message.
 func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *pb.GetLanguagesRequest) (*pb.LanguagesResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -75,7 +88,11 @@ func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *pb.GetLang
 	}
 }
 
-// ADMIN PORTAL API
+// This is ADMIN PORTAL API,
+// BulkGetProfileMaster returns a list of all profile masters if the user is an admin.
+// It takes a context and a BulkGetProfileMasterRequest as input and returns a ProfileMasterResponse and an error.
+// The function checks if the user is an admin and returns an error if not.
+// It then retrieves a list of all profile masters and returns it in a ProfileMasterResponse.
 func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *pb.BulkGetProfileMasterRequest) (*pb.ProfileMasterResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -106,8 +123,12 @@ func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *pb
 	}
 }
 
-// ADMIN PORTAL API
-// Delete Profile Master
+// This is ADMIN PORTAL API,
+// DeleteProfileMaster deletes a profile master record from the database.
+// It requires the user to be an admin to perform the operation.
+// If the user is not an admin, it returns a permission denied error.
+// If the profile master record is not found, it returns a not found error.
+// If there is an internal error during the operation, it returns an internal error.
 func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *pb.DeleteProfileMasterRequest) (*pb.DeleteProfileMasterResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -142,8 +163,14 @@ func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *pb.
 	}
 }
 
-// ADMIN PORTAL API
-// Add Profile Master
+// This is ADMIN PORTAL API,
+// AddProfileMaster adds a new profile master to the database. It requires the user to have admin permissions.
+// The function takes a context and an AddProfileMasterRequest as input and returns a ProfileMasterProto and an error.
+// The ProfileMasterProto contains the newly added profile master's information.
+// If the user does not have admin permissions, the function returns a PermissionDenied error.
+// If the language is not present in the request, the function returns an InvalidArgument error.
+// If there is an internal error when saving the profile master, the function returns an Internal error.
+// If the profile master is successfully saved, the function returns the newly added profile
 func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *pb.AddProfileMasterRequest) (*pb.ProfileMasterProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -185,7 +212,9 @@ func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *pb.Add
 }
 
 // ADMIN PORTAL API
-// Update Profile Master
+// UpdateProfileMaster updates the profile master with the given request data for the user identified by the context.
+// It returns the updated profile master data if successful, otherwise it returns an error.
+// The user must have admin privileges to update the profile master.
 func (s *ProfileMasterService) UpdateProfileMaster(ctx context.Context, req *pb.ProfileMasterProto) (*pb.ProfileMasterProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
