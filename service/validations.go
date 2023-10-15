@@ -8,6 +8,10 @@ import (
 
 // all input validations will be added here.
 
+// ValidateProfileRequest validates the CreateProfileRequest protobuf message.
+// It checks if the name field is not empty and does not exceed 50 characters.
+// If the validation fails, it returns an error with a corresponding status code.
+// Otherwise, it returns nil.
 func ValidateProfileRequest(profileReq *pb.CreateProfileRequest) error {
 	nameLen := len(profileReq.Name)
 	if nameLen == 0 {
