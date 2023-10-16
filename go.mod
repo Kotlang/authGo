@@ -71,4 +71,4 @@ require (
 	nhooyr.io/websocket v1.8.7 // indirect
 )
 
-replace github.com/SaiNageswarS/go-api-boot v0.1.33 => ../go-api-boot
+// replace github.com/SaiNageswarS/go-api-boot v0.1.33 => ../go-api-boot
