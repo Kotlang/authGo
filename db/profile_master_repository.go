@@ -6,6 +6,11 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+type ProfileMasterRepositoryInterface interface {
+	odm.AbstractRepositoryInterface[models.ProfileMasterModel]
+	FindByLanguage(language string) (chan []models.ProfileMasterModel, chan error)
+}
+
 type ProfileMasterRepository struct {
 	odm.AbstractRepository[models.ProfileMasterModel]
 }

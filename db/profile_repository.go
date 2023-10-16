@@ -6,6 +6,11 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
+type ProfileRepositoryInterface interface {
+	odm.AbstractRepositoryInterface[models.ProfileModel]
+	FindByIds(ids []string) (chan []models.ProfileModel, chan error)
+}
+
 type ProfileRepository struct {
 	odm.AbstractRepository[models.ProfileModel]
 }

@@ -23,10 +23,10 @@ import (
 
 type ProfileService struct {
 	pb.UnimplementedProfileServer
-	db *db.AuthDb
+	db db.AuthDbInterface
 }
 
-func NewProfileService(db *db.AuthDb) *ProfileService {
+func NewProfileService(db db.AuthDbInterface) *ProfileService {
 	return &ProfileService{
 		db: db,
 	}
@@ -207,7 +207,7 @@ func getMapFromJson(jsonStr string) map[string]interface{} {
 }
 
 // gets profile for userId or return empty model if doesn't exist.
-func getExistingOrEmptyProfile(db *db.AuthDb, tenant, userId string) (*models.LoginModel, *models.ProfileModel) {
+func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) (*models.LoginModel, *models.ProfileModel) {
 	profile := &models.ProfileModel{}
 	loginInfo := &models.LoginModel{}
 

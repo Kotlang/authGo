@@ -17,12 +17,18 @@ type Channel interface {
 	Verify(to, otp string) bool
 }
 
+type OtpClientInterface interface {
+	SendOtp(tenant, to string) error
+	GetLoginInfo(tenant, to string) *models.LoginModel
+	ValidateOtp(tenant, to, otp string) bool
+}
+
 type OtpClient struct {
-	db       *db.AuthDb
+	db       db.AuthDbInterface
 	channels []Channel
 }
 
-func NewOtpClient(db *db.AuthDb) *OtpClient {
+func NewOtpClient(db db.AuthDbInterface) OtpClientInterface {
 	return &OtpClient{
 		db:       db,
 		channels: []Channel{&EmailClient{Db: db}, &PhoneClient{Db: db}},

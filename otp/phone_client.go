@@ -13,8 +13,17 @@ import (
 	"go.uber.org/zap"
 )
 
+type PhoneClientInterface interface {
+	db.AuthDbInterface
+	IsValid(emailOrPhone string) bool
+	SendOtp(phoneNumber string)
+	SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel
+	GetLoginInfo(tenant, phone string) *models.LoginModel
+	Verify(to, otp string) bool
+}
+
 type PhoneClient struct {
-	Db *db.AuthDb
+	Db db.AuthDbInterface
 }
 
 func isAllDigit(s string) bool {

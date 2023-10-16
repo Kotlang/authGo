@@ -8,8 +8,17 @@ import (
 	"github.com/Kotlang/authGo/models"
 )
 
+type EmailClientInterface interface {
+	db.AuthDbInterface
+	IsValid(emailOrPhone string) bool
+	SendOtp(emailId string)
+	SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel
+	GetLoginInfo(tenant, email string) *models.LoginModel
+	Verify(to, otp string) bool
+}
+
 type EmailClient struct {
-	Db *db.AuthDb
+	Db db.AuthDbInterface
 }
 
 func (c *EmailClient) IsValid(emailOrPhone string) bool {

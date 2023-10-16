@@ -5,9 +5,16 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/odm"
 )
 
+type AuthDbInterface interface {
+	Login(tenant string) LoginRepositoryInterface
+	Profile(tenant string) ProfileRepositoryInterface
+	Tenant() TenantRepositoryInterface
+	ProfileMaster(tenant string) ProfileMasterRepositoryInterface
+}
+
 type AuthDb struct{}
 
-func (a *AuthDb) Login(tenant string) *LoginRepository {
+func (a *AuthDb) Login(tenant string) LoginRepositoryInterface {
 	baseRepo := odm.AbstractRepository[models.LoginModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "login",
@@ -16,7 +23,7 @@ func (a *AuthDb) Login(tenant string) *LoginRepository {
 	return &LoginRepository{baseRepo}
 }
 
-func (a *AuthDb) Profile(tenant string) *ProfileRepository {
+func (a *AuthDb) Profile(tenant string) ProfileRepositoryInterface {
 	baseRepo := odm.AbstractRepository[models.ProfileModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "profile",
@@ -24,7 +31,7 @@ func (a *AuthDb) Profile(tenant string) *ProfileRepository {
 	return &ProfileRepository{baseRepo}
 }
 
-func (a *AuthDb) Tenant() *TenantRepository {
+func (a *AuthDb) Tenant() TenantRepositoryInterface {
 	baseRepo := odm.AbstractRepository[models.TenantModel]{
 		Database:       "global",
 		CollectionName: "tenant",
@@ -32,7 +39,7 @@ func (a *AuthDb) Tenant() *TenantRepository {
 	return &TenantRepository{baseRepo}
 }
 
-func (a *AuthDb) ProfileMaster(tenant string) *ProfileMasterRepository {
+func (a *AuthDb) ProfileMaster(tenant string) ProfileMasterRepositoryInterface {
 	baseRepo := odm.AbstractRepository[models.ProfileMasterModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "profile_master",
