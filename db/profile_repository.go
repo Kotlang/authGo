@@ -7,12 +7,12 @@ import (
 )
 
 type ProfileRepositoryInterface interface {
-	odm.AbstractRepositoryInterface[models.ProfileModel]
+	odm.BootRepository[models.ProfileModel]
 	FindByIds(ids []string) (chan []models.ProfileModel, chan error)
 }
 
 type ProfileRepository struct {
-	odm.AbstractRepository[models.ProfileModel]
+	odm.UnimplementedBootRepository[models.ProfileModel]
 }
 
 func (p *ProfileRepository) FindByIds(ids []string) (chan []models.ProfileModel, chan error) {

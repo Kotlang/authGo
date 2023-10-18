@@ -15,7 +15,7 @@ type AuthDbInterface interface {
 type AuthDb struct{}
 
 func (a *AuthDb) Login(tenant string) LoginRepositoryInterface {
-	baseRepo := odm.AbstractRepository[models.LoginModel]{
+	baseRepo := odm.UnimplementedBootRepository[models.LoginModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "login",
 	}
@@ -24,7 +24,7 @@ func (a *AuthDb) Login(tenant string) LoginRepositoryInterface {
 }
 
 func (a *AuthDb) Profile(tenant string) ProfileRepositoryInterface {
-	baseRepo := odm.AbstractRepository[models.ProfileModel]{
+	baseRepo := odm.UnimplementedBootRepository[models.ProfileModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "profile",
 	}
@@ -32,7 +32,7 @@ func (a *AuthDb) Profile(tenant string) ProfileRepositoryInterface {
 }
 
 func (a *AuthDb) Tenant() TenantRepositoryInterface {
-	baseRepo := odm.AbstractRepository[models.TenantModel]{
+	baseRepo := odm.UnimplementedBootRepository[models.TenantModel]{
 		Database:       "global",
 		CollectionName: "tenant",
 	}
@@ -40,7 +40,7 @@ func (a *AuthDb) Tenant() TenantRepositoryInterface {
 }
 
 func (a *AuthDb) ProfileMaster(tenant string) ProfileMasterRepositoryInterface {
-	baseRepo := odm.AbstractRepository[models.ProfileMasterModel]{
+	baseRepo := odm.UnimplementedBootRepository[models.ProfileMasterModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "profile_master",
 	}

@@ -9,12 +9,12 @@ import (
 )
 
 type TenantRepositoryInterface interface {
-	odm.AbstractRepositoryInterface[models.TenantModel]
+	odm.BootRepository[models.TenantModel]
 	FindOneByToken(token string) chan *models.TenantModel
 }
 
 type TenantRepository struct {
-	odm.AbstractRepository[models.TenantModel]
+	odm.UnimplementedBootRepository[models.TenantModel]
 }
 
 func (t *TenantRepository) FindOneByToken(token string) chan *models.TenantModel {

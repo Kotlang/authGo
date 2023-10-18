@@ -7,12 +7,12 @@ import (
 )
 
 type ProfileMasterRepositoryInterface interface {
-	odm.AbstractRepositoryInterface[models.ProfileMasterModel]
+	odm.BootRepository[models.ProfileMasterModel]
 	FindByLanguage(language string) (chan []models.ProfileMasterModel, chan error)
 }
 
 type ProfileMasterRepository struct {
-	odm.AbstractRepository[models.ProfileMasterModel]
+	odm.UnimplementedBootRepository[models.ProfileMasterModel]
 }
 
 func (p *ProfileMasterRepository) FindByLanguage(language string) (chan []models.ProfileMasterModel, chan error) {
