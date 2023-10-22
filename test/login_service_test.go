@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// The TestLogin function will fail if it is rerun within 60 seconds
 func TestLogin(t *testing.T) {
 
 	var loginTestCases = []struct {
