@@ -11,7 +11,7 @@ import (
 
 type Channel interface {
 	IsValid(to string) bool
-	SendOtp(to string)
+	SendOtp(to string) error
 	GetLoginInfo(tenant, to string) *models.LoginModel
 	SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel
 	Verify(to, otp string) bool
@@ -48,12 +48,16 @@ func (c *OtpClient) SendOtp(tenant, to string) error {
 			loginInfo.LastOtpSentTime = now
 
 			// send otp through the channel.
-			channel.SendOtp(to)
+			err := channel.SendOtp(to)
+			if err != nil {
+				return status.Error(codes.Internal, "Failed sending otp")
+			}
 			channel.SaveLoginInfo(tenant, loginInfo)
+			//If the message is sent succesfully return nil
+			return nil
 		}
 	}
-
-	return nil
+	return status.Error(codes.InvalidArgument, "Incorrect email or phone")
 }
 
 func (c *OtpClient) GetLoginInfo(tenant, to string) *models.LoginModel {

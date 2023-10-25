@@ -7,12 +7,12 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/jinzhu/copier v0.3.2
 	github.com/rs/cors v1.9.0
+	github.com/stretchr/testify v1.8.4
 	github.com/twilio/twilio-go v0.9.0
 	go.mongodb.org/mongo-driver v1.11.3
 	go.uber.org/zap v1.21.0
 	google.golang.org/grpc v1.38.0
 	google.golang.org/protobuf v1.27.1
-	github.com/stretchr/testify v1.8.4
 )
 
 require (

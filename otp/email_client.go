@@ -11,7 +11,7 @@ import (
 type EmailClientInterface interface {
 	db.AuthDbInterface
 	IsValid(emailOrPhone string) bool
-	SendOtp(emailId string)
+	SendOtp(emailId string) error
 	SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel
 	GetLoginInfo(tenant, email string) *models.LoginModel
 	Verify(to, otp string) bool
@@ -26,8 +26,9 @@ func (c *EmailClient) IsValid(emailOrPhone string) bool {
 	return match
 }
 
-func (c *EmailClient) SendOtp(emailId string) {
+func (c *EmailClient) SendOtp(emailId string) error {
 	// TODO: Use twilio with send-grid to send otp to email.
+	return nil
 }
 
 func (c *EmailClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel {
