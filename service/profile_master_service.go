@@ -20,10 +20,10 @@ import (
 
 type ProfileMasterService struct {
 	pb.UnimplementedProfileMasterServer
-	db *db.AuthDb
+	db db.AuthDbInterface
 }
 
-func NewProfileMasterService(authDB *db.AuthDb) *ProfileMasterService {
+func NewProfileMasterService(authDB db.AuthDbInterface) *ProfileMasterService {
 	return &ProfileMasterService{
 		db: authDB,
 	}

@@ -8,8 +8,13 @@ import (
 	"go.uber.org/zap"
 )
 
+type TenantRepositoryInterface interface {
+	odm.BootRepository[models.TenantModel]
+	FindOneByToken(token string) chan *models.TenantModel
+}
+
 type TenantRepository struct {
-	odm.AbstractRepository[models.TenantModel]
+	odm.UnimplementedBootRepository[models.TenantModel]
 }
 
 func (t *TenantRepository) FindOneByToken(token string) chan *models.TenantModel {

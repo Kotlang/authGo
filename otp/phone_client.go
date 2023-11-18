@@ -13,8 +13,17 @@ import (
 	"go.uber.org/zap"
 )
 
+type PhoneClientInterface interface {
+	db.AuthDbInterface
+	IsValid(emailOrPhone string) bool
+	SendOtp(phoneNumber string) error
+	SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel
+	GetLoginInfo(tenant, phone string) *models.LoginModel
+	Verify(to, otp string) bool
+}
+
 type PhoneClient struct {
-	Db *db.AuthDb
+	Db db.AuthDbInterface
 }
 
 func isAllDigit(s string) bool {
@@ -30,7 +39,7 @@ func (c *PhoneClient) IsValid(emailOrPhone string) bool {
 	return len(emailOrPhone) == 10 && isAllDigit(emailOrPhone)
 }
 
-func (c *PhoneClient) SendOtp(phoneNumber string) {
+func (c *PhoneClient) SendOtp(phoneNumber string) error {
 	accountSid := os.Getenv("TWILIO-ACCOUNT-SID")
 	authToken := os.Getenv("TWILIO-AUTH-TOKEN")
 	client := twilio.NewRestClient(accountSid, authToken)
@@ -46,9 +55,10 @@ func (c *PhoneClient) SendOtp(phoneNumber string) {
 
 	if err != nil {
 		logger.Error("Failed sending otp", zap.Error(err))
-		return
+		return err
 	}
 	logger.Info("Sending otp status", zap.String("status", *res.Status))
+	return nil
 }
 
 func (c *PhoneClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel {

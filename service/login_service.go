@@ -16,13 +16,13 @@ import (
 
 type LoginService struct {
 	pb.UnimplementedLoginServer
-	db  *db.AuthDb
-	otp *otp.OtpClient
+	db  db.AuthDbInterface
+	otp otp.OtpClientInterface
 }
 
 func NewLoginService(
-	authDb *db.AuthDb,
-	otp *otp.OtpClient) *LoginService {
+	authDb db.AuthDbInterface,
+	otp otp.OtpClientInterface) *LoginService {
 
 	return &LoginService{
 		db:  authDb,

@@ -7,9 +7,9 @@ import (
 )
 
 type Inject struct {
-	AuthDb *db.AuthDb
+	AuthDb db.AuthDbInterface
 
-	Otp *otp.OtpClient
+	Otp otp.OtpClientInterface
 
 	LoginService         *service.LoginService
 	ProfileService       *service.ProfileService

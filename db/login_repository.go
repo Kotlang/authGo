@@ -8,8 +8,15 @@ import (
 	"go.uber.org/zap"
 )
 
+type LoginRepositoryInterface interface {
+	odm.BootRepository[models.LoginModel]
+	FindOneByEmail(email string) chan *models.LoginModel
+	FindOneByPhone(phone string) chan *models.LoginModel
+	FindByIds(ids []string) (chan []models.LoginModel, chan error)
+}
+
 type LoginRepository struct {
-	odm.AbstractRepository[models.LoginModel]
+	odm.UnimplementedBootRepository[models.LoginModel]
 }
 
 func (t *LoginRepository) FindOneByEmail(email string) chan *models.LoginModel {
