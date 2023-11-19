@@ -27,6 +27,7 @@ type ProfileModel struct {
 	MetadataMap              map[string]interface{} `bson:"metadata"`
 	CertificationDetails     CertificateModel       `bson:"certificationDetails" json:"certificationDetails"`
 	CreatedOn                int64                  `bson:"createdOn,omitempty" json:"createdOn"`
+	LandSizeInAcres          string                 `bson:"landSizeInAcres" json:"landSizeInAcres"`
 }
 
 func (m *ProfileModel) Id() string {
