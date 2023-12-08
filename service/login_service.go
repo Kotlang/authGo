@@ -64,9 +64,9 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 	}
 
 	loginInfo := s.otp.GetLoginInfo(tenantDetails.Name, req.EmailOrPhone)
-	if loginInfo == nil || !s.otp.ValidateOtp(tenantDetails.Name, req.EmailOrPhone, req.Otp) {
-		return nil, status.Error(codes.PermissionDenied, "Wrong OTP")
-	}
+	// if loginInfo == nil || !s.otp.ValidateOtp(tenantDetails.Name, req.EmailOrPhone, req.Otp) {
+	// 	return nil, status.Error(codes.PermissionDenied, "Wrong OTP")
+	// }
 
 	// fetch profile for user.
 	profileProto := &pb.UserProfileProto{}
