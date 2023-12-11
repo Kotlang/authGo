@@ -16,6 +16,7 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/bootUtils"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -85,6 +86,32 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.GetProfileR
 	loginInfo, profile := getExistingOrEmptyProfile(s.db, tenant, userId)
 	profileProto := getProfileProto(loginInfo, profile)
 
+	return profileProto, nil
+}
+
+func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.GetProfileByPhoneOrEmailRequest) (*pb.UserProfileProto, error) {
+	_, tenant := auth.GetUserIdAndTenant(ctx)
+
+	if req.Email == "" && req.Phone == "" {
+		return nil, status.Error(codes.InvalidArgument, "Email or Phone is required")
+	}
+
+	loginModel := &models.LoginModel{}
+	loginModel.Email = req.Email
+	loginModel.Phone = req.Phone
+
+	profileResChan, errChan := s.db.Profile(tenant).FindOneById(loginModel.Id())
+	profileProto := &pb.UserProfileProto{}
+	select {
+	case loginInfo := <-profileResChan:
+		copier.CopyWithOption(profileProto, loginInfo, copier.Option{IgnoreEmpty: true})
+	case err := <-errChan:
+		if err == mongo.ErrNoDocuments {
+			return nil, status.Error(codes.NotFound, "Profile not found")
+		}
+		logger.Error("Failed getting profile", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile")
+	}
 	return profileProto, nil
 }
 
