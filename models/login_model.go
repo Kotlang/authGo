@@ -1,10 +1,9 @@
 package models
 
-import (
-	"encoding/base64"
-)
+import "github.com/google/uuid"
 
 type LoginModel struct {
+	userId               string `bson:"_id"`
 	Email                string `bson:"email"`
 	Phone                string `bson:"phone"`
 	Otp                  string `bson:"otp"`
@@ -15,9 +14,8 @@ type LoginModel struct {
 }
 
 func (m *LoginModel) Id() string {
-	if len(m.Email) > 0 {
-		return base64.StdEncoding.EncodeToString([]byte(m.Email))
-	} else {
-		return base64.StdEncoding.EncodeToString([]byte(m.Phone))
+	if m.userId == "" {
+		m.userId = uuid.New().String()
 	}
+	return m.userId
 }
