@@ -26,11 +26,6 @@ func (c *EmailClient) IsValid(emailOrPhone string) bool {
 	return match
 }
 
-func (c *EmailClient) SendOtp(emailId string) error {
-	// TODO: Use twilio with send-grid to send otp to email.
-	return nil
-}
-
 func (c *EmailClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel {
 	userType := strings.TrimSpace(loginInfo.UserType)
 
@@ -44,7 +39,7 @@ func (c *EmailClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel)
 }
 
 func (c *EmailClient) GetLoginInfo(tenant, email string) *models.LoginModel {
-	loginInfo := <-c.Db.Login(tenant).FindOneByEmail(email)
+	loginInfo := <-c.Db.Login(tenant).FindOneByPhoneOrEmail("", email)
 	if loginInfo == nil {
 		loginInfo = &models.LoginModel{
 			Email:    email,
@@ -52,6 +47,11 @@ func (c *EmailClient) GetLoginInfo(tenant, email string) *models.LoginModel {
 		}
 	}
 	return loginInfo
+}
+
+func (c *EmailClient) SendOtp(emailId string) error {
+	// TODO: Use twilio with send-grid to send otp to email.
+	return nil
 }
 
 func (c *EmailClient) Verify(to, otp string) bool {
