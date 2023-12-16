@@ -92,11 +92,10 @@ func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.G
 	if req.Email == "" && req.Phone == "" {
 		return nil, status.Error(codes.InvalidArgument, "Email or Phone is required")
 	}
+	// get login info using email or phone
+	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
 
-	loginModel := &models.LoginModel{}
-	loginModel.Email = req.Email
-	loginModel.Phone = req.Phone
-
+	// get profile using login id from login in
 	profileResChan, errChan := s.db.Profile(tenant).FindOneById(loginModel.Id())
 	profileProto := &pb.UserProfileProto{}
 	select {
