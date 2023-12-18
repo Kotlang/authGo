@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/bootUtils"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
+	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -49,14 +49,12 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	}
 
 	// merge old profile and new profile
-	newMetadata := copyAll(oldProfile.MetadataMap, getMapFromJson(req.MetaDataMap))
 	copier.CopyWithOption(oldProfile, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 	value, ok := pb.Gender_name[int32(req.Gender)]
 	if !ok {
 		value = pb.Gender_name[int32(pb.Gender_Unspecified)]
 	}
 	oldProfile.Gender = value
-	oldProfile.MetadataMap = newMetadata
 
 	err = <-s.db.Profile(tenant).Save(oldProfile)
 
@@ -85,6 +83,31 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.GetProfileR
 	loginInfo, profile := getExistingOrEmptyProfile(s.db, tenant, userId)
 	profileProto := getProfileProto(loginInfo, profile)
 
+	return profileProto, nil
+}
+
+func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.GetProfileByPhoneOrEmailRequest) (*pb.UserProfileProto, error) {
+	_, tenant := auth.GetUserIdAndTenant(ctx)
+
+	if req.Email == "" && req.Phone == "" {
+		return nil, status.Error(codes.InvalidArgument, "Email or Phone is required")
+	}
+	// get login info using email or phone
+	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
+
+	// get profile using login id from login in
+	profileResChan, errChan := s.db.Profile(tenant).FindOneById(loginModel.Id())
+	profileProto := &pb.UserProfileProto{}
+	select {
+	case loginInfo := <-profileResChan:
+		copier.CopyWithOption(profileProto, loginInfo, copier.Option{IgnoreEmpty: true, DeepCopy: true})
+	case err := <-errChan:
+		if err == mongo.ErrNoDocuments {
+			return nil, status.Error(codes.NotFound, "Profile not found")
+		}
+		logger.Error("Failed getting profile", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile")
+	}
 	return profileProto, nil
 }
 
@@ -188,24 +211,6 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 	}
 }
 
-func copyAll(oldMap, newMap map[string]interface{}) map[string]interface{} {
-	if oldMap == nil {
-		oldMap = make(map[string]interface{})
-	}
-
-	for k, v := range newMap {
-		oldMap[k] = v
-	}
-
-	return oldMap
-}
-
-func getMapFromJson(jsonStr string) map[string]interface{} {
-	var result map[string]interface{}
-	json.Unmarshal([]byte(jsonStr), &result)
-	return result
-}
-
 // gets profile for userId or return empty model if doesn't exist.
 func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) (*models.LoginModel, *models.ProfileModel) {
 	profile := &models.ProfileModel{}
@@ -246,12 +251,5 @@ func getProfileProto(loginModel *models.LoginModel, profileModel *models.Profile
 		value = int32(pb.Gender_Unspecified)
 	}
 	result.Gender = pb.Gender(value)
-	// serialize metadata map.
-	metadataString, err := json.Marshal(profileModel.MetadataMap)
-	if err != nil {
-		logger.Error("Failed serializing metadata json", zap.Any("MetadataMap", profileModel.MetadataMap))
-	}
-
-	result.MetaDataMap = string(metadataString)
 	return result
 }

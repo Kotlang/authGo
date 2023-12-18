@@ -39,6 +39,31 @@ func (c *PhoneClient) IsValid(emailOrPhone string) bool {
 	return len(emailOrPhone) == 10 && isAllDigit(emailOrPhone)
 }
 
+func (c *PhoneClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel {
+	userType := strings.TrimSpace(loginInfo.UserType)
+
+	if len(userType) == 0 {
+		loginInfo.UserType = "default"
+	}
+
+	<-c.Db.Login(tenant).Save(loginInfo)
+
+	return loginInfo
+}
+
+// get login info using phone number
+func (c *PhoneClient) GetLoginInfo(tenant, phone string) *models.LoginModel {
+	loginInfo := <-c.Db.Login(tenant).FindOneByPhoneOrEmail(phone, "")
+	if loginInfo == nil {
+		loginInfo = &models.LoginModel{
+			Phone:    phone,
+			UserType: "default",
+		}
+	}
+	return loginInfo
+}
+
+// sends otp to phone number using twilio.
 func (c *PhoneClient) SendOtp(phoneNumber string) error {
 	accountSid := os.Getenv("TWILIO-ACCOUNT-SID")
 	authToken := os.Getenv("TWILIO-AUTH-TOKEN")
@@ -61,29 +86,7 @@ func (c *PhoneClient) SendOtp(phoneNumber string) error {
 	return nil
 }
 
-func (c *PhoneClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel {
-	userType := strings.TrimSpace(loginInfo.UserType)
-
-	if len(userType) == 0 {
-		loginInfo.UserType = "default"
-	}
-
-	<-c.Db.Login(tenant).Save(loginInfo)
-
-	return loginInfo
-}
-
-func (c *PhoneClient) GetLoginInfo(tenant, phone string) *models.LoginModel {
-	loginInfo := <-c.Db.Login(tenant).FindOneByPhone(phone)
-	if loginInfo == nil {
-		loginInfo = &models.LoginModel{
-			Phone:    phone,
-			UserType: "default",
-		}
-	}
-	return loginInfo
-}
-
+// verifies otp and returns true if otp is valid.
 func (c *PhoneClient) Verify(to, otp string) bool {
 	accountSid := os.Getenv("TWILIO-ACCOUNT-SID")
 	authToken := os.Getenv("TWILIO-AUTH-TOKEN")

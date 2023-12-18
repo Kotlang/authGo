@@ -10,38 +10,27 @@ import (
 
 type LoginRepositoryInterface interface {
 	odm.BootRepository[models.LoginModel]
-	FindOneByEmail(email string) chan *models.LoginModel
-	FindOneByPhone(phone string) chan *models.LoginModel
 	FindByIds(ids []string) (chan []models.LoginModel, chan error)
+	FindOneByPhoneOrEmail(phone, email string) chan *models.LoginModel
 }
 
 type LoginRepository struct {
 	odm.UnimplementedBootRepository[models.LoginModel]
 }
 
-func (t *LoginRepository) FindOneByEmail(email string) chan *models.LoginModel {
+func (t *LoginRepository) FindOneByPhoneOrEmail(phone, email string) chan *models.LoginModel {
 	ch := make(chan *models.LoginModel)
 
 	go func() {
-		id := (&models.LoginModel{Email: email}).Id()
-		resultChan, errorChan := t.FindOneById(id)
+		filter := bson.M{}
 
-		select {
-		case res := <-resultChan:
-			ch <- res
-		case err := <-errorChan:
-			logger.Error("Error fetching login info", zap.Error(err))
+		if len(phone) > 0 {
+			filter["phone"] = phone
+		} else {
+			filter["email"] = email
 		}
-	}()
-	return ch
-}
 
-func (t *LoginRepository) FindOneByPhone(phone string) chan *models.LoginModel {
-	ch := make(chan *models.LoginModel)
-
-	go func() {
-		id := (&models.LoginModel{Phone: phone}).Id()
-		resultChan, errorChan := t.FindOneById(id)
+		resultChan, errorChan := t.FindOne(filter)
 
 		select {
 		case res := <-resultChan:

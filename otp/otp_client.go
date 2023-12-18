@@ -50,8 +50,14 @@ func (c *OtpClient) SendOtp(tenant, to string) error {
 			// send otp through the channel.
 			err := channel.SendOtp(to)
 			if err != nil {
-				return err
+				return status.Error(codes.Internal, "Failed sending otp")
 			}
+
+			// if the user is new populate the UserId field to avoid email and phone clients generating two different ids
+			if loginInfo.UserId == "" {
+				loginInfo.UserId = loginInfo.Id()
+			}
+
 			channel.SaveLoginInfo(tenant, loginInfo)
 			//If the message is sent succesfully return nil
 			return nil
