@@ -73,7 +73,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	return userProfileProto, err
 }
 
-func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.GetProfileRequest) (*pb.UserProfileProto, error) {
+func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) (*pb.UserProfileProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	if len(req.UserId) > 0 {
@@ -149,6 +149,29 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGe
 	return &pb.BulkGetProfileResponse{
 		Profiles: profileProtoList,
 	}, nil
+}
+
+func (s *ProfileService) IsUserAdmin(ctx context.Context, req *pb.IdRequest) (*pb.IsUserAdminResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	if len(req.UserId) > 0 {
+		userId = req.UserId
+	}
+
+	loginInfoChan, errResChan := s.db.Login(tenant).FindOneById(userId)
+
+	select {
+	case loginInfo := <-loginInfoChan:
+		return &pb.IsUserAdminResponse{
+			IsAdmin: loginInfo.UserType == "admin",
+		}, nil
+	case err := <-errResChan:
+		if err == mongo.ErrNoDocuments {
+			return nil, status.Error(codes.NotFound, "User not found")
+		}
+		logger.Error("Failed getting login info", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login info")
+	}
 }
 
 func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.ProfileImageUploadRequest) (*pb.ProfileImageUploadURL, error) {
