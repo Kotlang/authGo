@@ -101,6 +101,7 @@ func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.G
 	select {
 	case loginInfo := <-profileResChan:
 		copier.CopyWithOption(profileProto, loginInfo, copier.Option{IgnoreEmpty: true, DeepCopy: true})
+		copyWithAttributes(loginInfo, profileProto)
 	case err := <-errChan:
 		if err == mongo.ErrNoDocuments {
 			return nil, status.Error(codes.NotFound, "Profile not found")
@@ -111,7 +112,7 @@ func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.G
 	return profileProto, nil
 }
 
-func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGetProfileRequest) (*pb.BulkGetProfileResponse, error) {
+func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGetProfileRequest) (*pb.ProfileListResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
 	profileResChan, profileErrorChan := s.db.Profile(tenant).FindByIds(req.UserIds)
@@ -146,7 +147,7 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGe
 		profileProtoList = append(profileProtoList, getProfileProto(&loginInfo, &profile))
 	}
 
-	return &pb.BulkGetProfileResponse{
+	return &pb.ProfileListResponse{
 		Profiles: profileProtoList,
 	}, nil
 }
@@ -234,13 +235,12 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 	}
 }
 
-func (s *ProfileService) GetAllProfiles(ctx context.Context, req *pb.GetAllProfilesRequest) (*pb.GetAllProfilesResponse, error) {
+func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfilesRequest) (*pb.ProfileListResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
 
 	select {
 	case loginModel := <-loginModelChan:
-		fmt.Println(loginModel.Phone)
 		if loginModel.UserType != "admin" {
 			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
 		}
@@ -252,13 +252,14 @@ func (s *ProfileService) GetAllProfiles(ctx context.Context, req *pb.GetAllProfi
 	userids := s.db.Profile(tenant).GetUserIds(req.Filters, int64(req.PageSize), int64(req.PageNumber))
 
 	userProfileProto := []*pb.UserProfileProto{}
-
 	copier.CopyWithOption(&userProfileProto, &userids, copier.Option{
 		IgnoreEmpty: true,
 		DeepCopy:    true,
 	})
-	extensions.AttachAttributes(&userids, userProfileProto)
-	response := &pb.GetAllProfilesResponse{Profiles: userProfileProto}
+	for i, userModel := range userids {
+		copyWithAttributes(&userModel, userProfileProto[i])
+	}
+	response := &pb.ProfileListResponse{Profiles: userProfileProto}
 	return response, nil
 }
 
@@ -303,4 +304,16 @@ func getProfileProto(loginModel *models.LoginModel, profileModel *models.Profile
 	}
 	result.Gender = pb.Gender(value)
 	return result
+}
+
+func copyWithAttributes(userModel *models.ProfileModel, userProfileProto *pb.UserProfileProto) {
+	if genderEnumValue, ok := pb.Gender_value[userModel.Gender]; ok {
+		userProfileProto.Gender = pb.Gender(genderEnumValue)
+	}
+	if farmingTypeEnumValue, ok := pb.FarmingType_value[userModel.FarmingType]; ok {
+		userProfileProto.FarmingType = pb.FarmingType(farmingTypeEnumValue)
+	}
+	if landSizeEnumValue, ok := pb.LandSizeInAcres_value[userModel.LandSizeInAcres]; ok {
+		userProfileProto.LandSizeInAcres = pb.LandSizeInAcres(landSizeEnumValue)
+	}
 }

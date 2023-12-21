@@ -26,21 +26,20 @@ func (p *ProfileRepository) FindByIds(ids []string) (chan []models.ProfileModel,
 func (t *ProfileRepository) GetUserIds(userfilters *pb.Userfilters, PageSize, PageNumber int64) []models.ProfileModel {
 	filters := bson.M{}
 
-	if userfilters != nil && len(userfilters.Name) > 0 {
+	if name := userfilters.Name; name != "" {
 		filters["name"] = userfilters.Name
 	}
-	if userfilters != nil && userfilters.Gender.String() != "Male" {
-		println(userfilters.Gender.String())
-		filters["gender"] = bson.M{"$eq": userfilters.Gender.String()}
+	if gender := userfilters.Gender.String(); gender != "Male" {
+		filters["gender"] = userfilters.Gender.String()
 	}
-	if userfilters != nil && userfilters.FarmingType.String() != "ORGANIC" {
-		filters["farmingType"] = bson.M{"$eq": userfilters.FarmingType.String()}
+	if farmingType := userfilters.FarmingType.String(); farmingType != "ORGANIC" {
+		filters["farmingType"] = userfilters.FarmingType.String()
 	}
-	if userfilters != nil && userfilters.LandSizeInAcres.String() != "LESSTHAN2" {
-		filters["landSizeInAcres"] = bson.M{"$eq": userfilters.LandSizeInAcres.String()}
+	if land := userfilters.LandSizeInAcres.String(); land != "LESSTHAN2" {
+		filters["landSizeInAcres"] = userfilters.LandSizeInAcres.String()
 	}
-	if userfilters != nil && userfilters.YearsSinceOrganicFarming > 0 {
-		filters["yearsSinceOrganicFarming"] = bson.M{"$eq": userfilters.YearsSinceOrganicFarming}
+	if year := userfilters.YearsSinceOrganicFarming; year > 0 {
+		filters["yearsSinceOrganicFarming"] = userfilters.YearsSinceOrganicFarming
 	}
 
 	skip := PageNumber * PageSize
