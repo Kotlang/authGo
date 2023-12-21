@@ -73,7 +73,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	return userProfileProto, err
 }
 
-func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.GetProfileRequest) (*pb.UserProfileProto, error) {
+func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) (*pb.UserProfileProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	if len(req.UserId) > 0 {
@@ -209,6 +209,34 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 		logger.Error("Failed uploading image", zap.Error(err))
 		return err
 	}
+}
+
+func (s *ProfileService) GetAllProfiles(ctx context.Context, req *pb.GetAllProfilesRequest) (*pb.GetAllProfilesResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
+
+	select {
+	case loginModel := <-loginModelChan:
+		fmt.Println(loginModel.Phone)
+		if loginModel.UserType != "admin" {
+			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
+	}
+
+	userids := s.db.Profile(tenant).GetUserIds(req.Filters, int64(req.PageSize), int64(req.PageNumber))
+
+	userProfileProto := []*pb.UserProfileProto{}
+
+	copier.CopyWithOption(&userProfileProto, &userids, copier.Option{
+		IgnoreEmpty: true,
+		DeepCopy:    true,
+	})
+	extensions.AttachAttributes(&userids, userProfileProto)
+	response := &pb.GetAllProfilesResponse{Profiles: userProfileProto}
+	return response, nil
 }
 
 // gets profile for userId or return empty model if doesn't exist.
