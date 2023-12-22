@@ -40,7 +40,8 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginInfo, oldProfile := getExistingOrEmptyProfile(s.db, tenant, userId)
+	// get existing profile
+	oldProfile := getExistingOrEmptyProfile(s.db, tenant, userId)
 
 	isNewUser := false
 	if len(oldProfile.LoginId) == 0 {
@@ -48,16 +49,13 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 		oldProfile.LoginId = userId
 	}
 
-	// merge old profile and new profile
-	copier.CopyWithOption(oldProfile, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
-	value, ok := pb.Gender_name[int32(req.Gender)]
-	if !ok {
-		value = pb.Gender_name[int32(pb.Gender_Unspecified)]
-	}
-	oldProfile.Gender = value
+	// merge old profile and new profile proto
+	oldProfile = getProfileModel(req, oldProfile)
 
+	// save profile to db
 	err = <-s.db.Profile(tenant).Save(oldProfile)
 
+	// if user is new, register notification event for user created.
 	if isNewUser {
 		extensions.RegisterEvent(ctx, &pb.RegisterEventRequest{
 			EventType: "user.created",
@@ -69,7 +67,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 		})
 	}
 
-	userProfileProto := getProfileProto(loginInfo, oldProfile)
+	userProfileProto := getProfileProto(oldProfile)
 	return userProfileProto, err
 }
 
@@ -80,8 +78,9 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) 
 		userId = req.UserId
 	}
 
-	loginInfo, profile := getExistingOrEmptyProfile(s.db, tenant, userId)
-	profileProto := getProfileProto(loginInfo, profile)
+	// get profile using userId convert to proto and return it.
+	profile := getExistingOrEmptyProfile(s.db, tenant, userId)
+	profileProto := getProfileProto(profile)
 
 	return profileProto, nil
 }
@@ -95,12 +94,15 @@ func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.G
 	// get login info using email or phone
 	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
 
+	if loginModel == nil {
+		return nil, status.Error(codes.NotFound, "User not found")
+	}
+
 	// get profile using login id from login in
 	profileResChan, errChan := s.db.Profile(tenant).FindOneById(loginModel.Id())
-	profileProto := &pb.UserProfileProto{}
 	select {
-	case loginInfo := <-profileResChan:
-		copier.CopyWithOption(profileProto, loginInfo, copier.Option{IgnoreEmpty: true, DeepCopy: true})
+	case profile := <-profileResChan:
+		return getProfileProto(profile), nil
 	case err := <-errChan:
 		if err == mongo.ErrNoDocuments {
 			return nil, status.Error(codes.NotFound, "Profile not found")
@@ -108,49 +110,32 @@ func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.G
 		logger.Error("Failed getting profile", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profile")
 	}
-	return profileProto, nil
 }
 
-func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGetProfileRequest) (*pb.BulkGetProfileResponse, error) {
+func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGetProfileRequest) (*pb.ProfileListResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
 	profileResChan, profileErrorChan := s.db.Profile(tenant).FindByIds(req.UserIds)
-	loginInfoChan, loginErrorChan := s.db.Login(tenant).FindByIds(req.UserIds)
-
-	profileMap := make(map[string]models.ProfileModel)
-	loginMap := make(map[string]models.LoginModel)
 
 	select {
 	case profileRes := <-profileResChan:
+		// convert profile model to proto
+		profileProtoList := make([]*pb.UserProfileProto, 0)
 		for _, profile := range profileRes {
-			profileMap[profile.Id()] = profile
+			profileProtoList = append(profileProtoList, getProfileProto(&profile))
 		}
+
+		return &pb.ProfileListResponse{
+			Profiles: profileProtoList,
+		}, nil
+
 	case err := <-profileErrorChan:
 		logger.Error("Failed getting profile", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profiles")
 	}
-
-	select {
-	case loginRes := <-loginInfoChan:
-		for _, login := range loginRes {
-			loginMap[login.Id()] = login
-		}
-	case err := <-loginErrorChan:
-		logger.Error("Failed getting login info", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting login info")
-	}
-
-	profileProtoList := make([]*pb.UserProfileProto, 0)
-	for _, userId := range req.UserIds {
-		loginInfo, profile := loginMap[userId], profileMap[userId]
-		profileProtoList = append(profileProtoList, getProfileProto(&loginInfo, &profile))
-	}
-
-	return &pb.BulkGetProfileResponse{
-		Profiles: profileProtoList,
-	}, nil
 }
 
+// check if user is admin or not.
 func (s *ProfileService) IsUserAdmin(ctx context.Context, req *pb.IdRequest) (*pb.IsUserAdminResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -160,6 +145,7 @@ func (s *ProfileService) IsUserAdmin(ctx context.Context, req *pb.IdRequest) (*p
 
 	loginInfoChan, errResChan := s.db.Login(tenant).FindOneById(userId)
 
+	//get login info using userId
 	select {
 	case loginInfo := <-loginInfoChan:
 		return &pb.IsUserAdminResponse{
@@ -194,6 +180,7 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.P
 	}, nil
 }
 
+// UploadProfileImage uploads profile image to azure bucket with max size of 5mb.
 func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImageServer) error {
 	userId, tenant := auth.GetUserIdAndTenant(stream.Context())
 	logger.Info("Uploading image", zap.String("userId", userId), zap.String("tenant", tenant))
@@ -235,12 +222,10 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 }
 
 // gets profile for userId or return empty model if doesn't exist.
-func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) (*models.LoginModel, *models.ProfileModel) {
+func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *models.ProfileModel {
 	profile := &models.ProfileModel{}
-	loginInfo := &models.LoginModel{}
 
 	profileResChan, profileErrorChan := db.Profile(tenant).FindOneById(userId)
-	loginInfoChan, loginErrorChan := db.Login(tenant).FindOneById(userId)
 
 	// in case of error, return empty profile.
 	select {
@@ -250,29 +235,80 @@ func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) (*m
 		logger.Error("Failed getting profile", zap.String("userId", userId), zap.String("tenant", tenant))
 	}
 
-	select {
-	case loginRes := <-loginInfoChan:
-		loginInfo = loginRes
-	case <-loginErrorChan:
-		logger.Error("Failed getting login info", zap.String("userId", userId), zap.String("tenant", tenant))
-	}
-
-	return loginInfo, profile
+	return profile
 }
 
-func getProfileProto(loginModel *models.LoginModel, profileModel *models.ProfileModel) *pb.UserProfileProto {
+// get profile proto from profile model
+func getProfileProto(profileModel *models.ProfileModel) *pb.UserProfileProto {
 	result := &pb.UserProfileProto{}
 
 	if profileModel == nil {
 		return result
 	}
 
-	copier.Copy(result, profileModel)
-	copier.CopyWithOption(result, loginModel, copier.Option{IgnoreEmpty: true})
+	copier.CopyWithOption(result, profileModel, copier.Option{
+		IgnoreEmpty: true,
+		DeepCopy:    true,
+	})
+
+	// copy gender value
 	value, ok := pb.Gender_value[profileModel.Gender]
 	if !ok {
 		value = int32(pb.Gender_Unspecified)
 	}
 	result.Gender = pb.Gender(value)
+
+	// copy farming type
+	value, ok = pb.FarmingType_value[profileModel.FarmingType]
+	if !ok {
+		value = int32(pb.FarmingType_UnspecifiedFarming)
+	}
+	result.FarmingType = pb.FarmingType(value)
+
+	// copy land size
+	value, ok = pb.LandSizeInAcres_value[profileModel.LandSizeInAcres]
+	if !ok {
+		value = int32(pb.LandSizeInAcres_UnspecifiedLandSize)
+	}
+	result.LandSizeInAcres = pb.LandSizeInAcres(value)
+
 	return result
+}
+
+// get profile model from profile proto
+func getProfileModel(profileProto *pb.CreateProfileRequest, profileModel *models.ProfileModel) *models.ProfileModel {
+
+	if profileModel == nil {
+		profileModel = &models.ProfileModel{}
+	}
+
+	copier.CopyWithOption(profileModel, profileProto, copier.Option{IgnoreEmpty: true, DeepCopy: true})
+
+	//copy gender if not unspecified
+	if profileProto.Gender != pb.Gender_Unspecified {
+		value, ok := pb.Gender_name[int32(profileProto.Gender)]
+		if !ok {
+			value = pb.Gender_name[int32(pb.Gender_Unspecified)]
+		}
+		profileModel.Gender = value
+	}
+
+	//copy farming type if not unspecified
+	if profileProto.FarmingType != pb.FarmingType_UnspecifiedFarming {
+		value, ok := pb.FarmingType_name[int32(profileProto.FarmingType)]
+		if !ok {
+			value = pb.FarmingType_name[int32(pb.FarmingType_UnspecifiedFarming)]
+		}
+		profileModel.FarmingType = value
+	}
+
+	//copy land size if not unspecified
+	if profileProto.LandSizeInAcres != pb.LandSizeInAcres_UnspecifiedLandSize {
+		value, ok := pb.LandSizeInAcres_name[int32(profileProto.LandSizeInAcres)]
+		if !ok {
+			value = pb.LandSizeInAcres_name[int32(pb.LandSizeInAcres_UnspecifiedLandSize)]
+		}
+		profileModel.LandSizeInAcres = value
+	}
+	return profileModel
 }
