@@ -249,7 +249,7 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfile
 		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
 	}
 
-	userids := s.db.Profile(tenant).GetUserIds(req.Filters, int64(req.PageSize), int64(req.PageNumber))
+	userids := s.db.Profile(tenant).GetProfiles(req.Filters, int64(req.PageSize), int64(req.PageNumber))
 
 	userProfileProto := []*pb.UserProfileProto{}
 	copier.CopyWithOption(&userProfileProto, &userids, copier.Option{

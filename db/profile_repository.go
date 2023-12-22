@@ -12,7 +12,7 @@ import (
 type ProfileRepositoryInterface interface {
 	odm.BootRepository[models.ProfileModel]
 	FindByIds(ids []string) (chan []models.ProfileModel, chan error)
-	GetUserIds(userfilters *pb.Userfilters, PageSize, PageNumber int64) []models.ProfileModel
+	GetProfiles(userfilters *pb.Userfilters, PageSize, PageNumber int64) []models.ProfileModel
 }
 
 type ProfileRepository struct {
@@ -23,19 +23,19 @@ func (p *ProfileRepository) FindByIds(ids []string) (chan []models.ProfileModel,
 	return p.Find(bson.M{"_id": bson.M{"$in": ids}}, nil, int64(len(ids)), 0)
 }
 
-func (t *ProfileRepository) GetUserIds(userfilters *pb.Userfilters, PageSize, PageNumber int64) []models.ProfileModel {
+func (t *ProfileRepository) GetProfiles(userfilters *pb.Userfilters, PageSize, PageNumber int64) []models.ProfileModel {
 	filters := bson.M{}
 
 	if name := userfilters.Name; name != "" {
 		filters["name"] = userfilters.Name
 	}
-	if gender := userfilters.Gender.String(); gender != "Male" {
+	if gender := userfilters.Gender.String(); gender != pb.Gender_Male.String() {
 		filters["gender"] = userfilters.Gender.String()
 	}
-	if farmingType := userfilters.FarmingType.String(); farmingType != "ORGANIC" {
+	if farmingType := userfilters.FarmingType.String(); farmingType != pb.FarmingType_ORGANIC.String() {
 		filters["farmingType"] = userfilters.FarmingType.String()
 	}
-	if land := userfilters.LandSizeInAcres.String(); land != "LESSTHAN2" {
+	if land := userfilters.LandSizeInAcres.String(); land != pb.LandSizeInAcres_LESSTHAN2.String() {
 		filters["landSizeInAcres"] = userfilters.LandSizeInAcres.String()
 	}
 	if year := userfilters.YearsSinceOrganicFarming; year > 0 {
