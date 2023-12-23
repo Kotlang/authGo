@@ -238,6 +238,32 @@ func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *mo
 	return profile
 }
 
+func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfilesRequest) (*pb.ProfileListResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
+
+	select {
+	case loginModel := <-loginModelChan:
+		if loginModel.UserType != "admin" {
+			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
+	}
+
+	profiles := s.db.Profile(tenant).GetProfiles(req.Filters, int64(req.PageSize), int64(req.PageNumber))
+
+	userProfileProto := []*pb.UserProfileProto{}
+
+	for _, userModel := range profiles {
+		userProfileProto = append(userProfileProto, getProfileProto(&userModel))
+	}
+
+	response := &pb.ProfileListResponse{Profiles: userProfileProto}
+	return response, nil
+}
+
 // get profile proto from profile model
 func getProfileProto(profileModel *models.ProfileModel) *pb.UserProfileProto {
 	result := &pb.UserProfileProto{}
