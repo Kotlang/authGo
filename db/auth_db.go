@@ -10,6 +10,7 @@ type AuthDbInterface interface {
 	Profile(tenant string) ProfileRepositoryInterface
 	Tenant() TenantRepositoryInterface
 	ProfileMaster(tenant string) ProfileMasterRepositoryInterface
+	ProfileDeletion(tenant string) ProfileDeletionRepositoryInterface
 }
 
 type AuthDb struct{}
@@ -46,4 +47,12 @@ func (a *AuthDb) ProfileMaster(tenant string) ProfileMasterRepositoryInterface {
 	}
 
 	return &ProfileMasterRepository{baseRepo}
+}
+
+func (a *AuthDb) ProfileDeletion(tenant string) ProfileDeletionRepositoryInterface {
+	baseRepo := odm.UnimplementedBootRepository[models.ProfileDeletionModel]{
+		Database:       tenant + "_auth",
+		CollectionName: "profile_deletion",
+	}
+	return &ProfileDeletionRepository{baseRepo}
 }

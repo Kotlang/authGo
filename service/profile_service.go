@@ -135,6 +135,95 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGe
 	}
 }
 
+func (s *ProfileService) RequestProfileDeletion(ctx context.Context, req *pb.DeleteProfileRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if profile exists
+	isExists := s.db.Profile(tenant).IsExistsById(userId)
+
+	if !isExists {
+		return &pb.StatusResponse{
+			Status: "Profile not found",
+		}, nil
+	}
+	profileDeletionModel := &models.ProfileDeletionModel{
+		UserId:       userId,
+		DeletionTime: time.Now().Unix(),
+	}
+	err := <-s.db.ProfileDeletion(tenant).Save(profileDeletionModel)
+
+	if err != nil {
+		logger.Error("Failed saving profile deletion request", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
+	}
+
+	return &pb.StatusResponse{
+		Status: "Profile deletion request sent",
+	}, nil
+}
+
+func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, req *pb.PendingProfileDeletionRequest) (*pb.PendingProfileDeletionRequestList, error) {
+	userID, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userID) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userID+" don't have permission")
+	}
+
+	// Fetch pending profile deletion requests
+	profileDeletionRequests := s.db.ProfileDeletion(tenant).GetProfileDeletionRequests(int64(req.PageSize), int64(req.PageNumber))
+
+	// convert profile model to proto
+	pendingProfileDeletionRequestList := make([]*pb.PendingProfileDeletionRespone, 0)
+
+	for _, profileDeletionReq := range profileDeletionRequests {
+		pendingProfileDeletionRequestList = append(pendingProfileDeletionRequestList, &pb.PendingProfileDeletionRespone{
+			UserId:       profileDeletionReq.UserId,
+			DeletionTime: profileDeletionReq.DeletionTime,
+		})
+	}
+
+	return &pb.PendingProfileDeletionRequestList{PendingProfileDeleteResponse: pendingProfileDeletionRequestList}, nil
+}
+
+func (s *ProfileService) DeleteProfile(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
+	}
+
+	// Check if profile exists
+	isExists := s.db.Profile(tenant).IsExistsById(req.UserId)
+
+	if !isExists {
+		return &pb.StatusResponse{
+			Status: "Profile not found",
+		}, nil
+	}
+
+	// Delete profile from db
+	err := <-s.db.Profile(tenant).DeleteById(req.UserId)
+	if err != nil {
+		logger.Error("Failed deleting profile", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed deleting profile")
+	}
+
+	// Delete login from db
+	err = <-s.db.Login(tenant).DeleteById(req.UserId)
+	if err != nil {
+		logger.Error("Failed deleting login", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed deleting login")
+	}
+
+	// TODO: Delete all posts, comments, notifications, etc. related to this user.
+
+	return &pb.StatusResponse{
+		Status: "Profile deleted successfully",
+	}, nil
+}
+
 // check if user is admin or not.
 func (s *ProfileService) IsUserAdmin(ctx context.Context, req *pb.IdRequest) (*pb.IsUserAdminResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
@@ -143,21 +232,11 @@ func (s *ProfileService) IsUserAdmin(ctx context.Context, req *pb.IdRequest) (*p
 		userId = req.UserId
 	}
 
-	loginInfoChan, errResChan := s.db.Login(tenant).FindOneById(userId)
+	isAdmin := s.db.Login(tenant).IsAdmin(userId)
 
-	//get login info using userId
-	select {
-	case loginInfo := <-loginInfoChan:
-		return &pb.IsUserAdminResponse{
-			IsAdmin: loginInfo.UserType == "admin",
-		}, nil
-	case err := <-errResChan:
-		if err == mongo.ErrNoDocuments {
-			return nil, status.Error(codes.NotFound, "User not found")
-		}
-		logger.Error("Failed getting login info", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting login info")
-	}
+	return &pb.IsUserAdminResponse{
+		IsAdmin: isAdmin,
+	}, nil
 }
 
 func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.ProfileImageUploadRequest) (*pb.ProfileImageUploadURL, error) {

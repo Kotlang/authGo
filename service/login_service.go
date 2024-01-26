@@ -45,6 +45,17 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
 	}
 
+	// check if user has requested for account deletion.
+	profileDeletionChan, errChan := s.db.ProfileDeletion(tenantDetails.Name).FindOneById(req.EmailOrPhone)
+	select {
+	case profileDeletion := <-profileDeletionChan:
+		if profileDeletion != nil {
+			return nil, status.Error(codes.PermissionDenied, "Account is marked for deletion")
+		}
+	case err := <-errChan:
+		logger.Error("Error fetching profile deletion", zap.Error(err))
+	}
+
 	err := s.otp.SendOtp(tenantDetails.Name, req.EmailOrPhone)
 	if err != nil {
 		return nil, err
