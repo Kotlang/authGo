@@ -18,6 +18,12 @@ type Addresses struct {
 	Country string `bson:"country" json:"country"`
 }
 
+type DeletionInfo struct {
+	MarkedForDeletion bool   `bson:"markedForDeletion" json:"markedForDeletion"`
+	DeletionTime      int64  `bson:"deletionTime" json:"deletionTime"`
+	Reason            string `bson:"reason" json:"reason"`
+}
+
 type ProfileModel struct {
 	LoginId                  string               `bson:"_id" json:"loginId"`
 	Name                     string               `bson:"name,omitempty" json:"name"`
@@ -34,6 +40,7 @@ type ProfileModel struct {
 	CertificationDetails     CertificateModel     `bson:"certificationDetails" json:"certificationDetails"`
 	CreatedOn                int64                `bson:"createdOn,omitempty" json:"createdOn"`
 	LandSizeInAcres          string               `bson:"landSizeInAcres" json:"landSizeInAcres"`
+	DeletionInfo             DeletionInfo         `bson:"deletionInfo" json:"deletionInfo"`
 }
 
 func (m *ProfileModel) Id() string {

@@ -20,7 +20,13 @@ type ProfileRepository struct {
 }
 
 func (p *ProfileRepository) FindByIds(ids []string) (chan []models.ProfileModel, chan error) {
-	return p.Find(bson.M{"_id": bson.M{"$in": ids}}, nil, int64(len(ids)), 0)
+	filter := bson.M{
+		"_id": bson.M{
+			"$in": ids,
+		},
+		"deletionInfo.markedForDeletion": false,
+	}
+	return p.Find(filter, nil, int64(len(ids)), 0)
 }
 
 func (t *ProfileRepository) GetProfiles(userfilters *pb.Userfilters, PageSize, PageNumber int64) []models.ProfileModel {
@@ -41,6 +47,8 @@ func (t *ProfileRepository) GetProfiles(userfilters *pb.Userfilters, PageSize, P
 	if year := userfilters.YearsSinceOrganicFarming; year > 0 {
 		filters["yearsSinceOrganicFarming"] = userfilters.YearsSinceOrganicFarming
 	}
+
+	filters["deletionInfo.markedForDeletion"] = false
 
 	skip := PageNumber * PageSize
 

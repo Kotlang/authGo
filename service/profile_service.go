@@ -15,6 +15,7 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/bootUtils"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -42,6 +43,11 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 
 	// get existing profile
 	oldProfile := getExistingOrEmptyProfile(s.db, tenant, userId)
+
+	// check if profile is marked for deletion
+	if oldProfile != nil && oldProfile.DeletionInfo.MarkedForDeletion {
+		return nil, status.Error(codes.PermissionDenied, "Profile marked for deletion")
+	}
 
 	isNewUser := false
 	if len(oldProfile.LoginId) == 0 {
@@ -79,10 +85,24 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) 
 	}
 
 	// get profile using userId convert to proto and return it.
-	profile := getExistingOrEmptyProfile(s.db, tenant, userId)
-	profileProto := getProfileProto(profile)
+	filter := bson.M{
+		"_id":                            userId,
+		"deletionInfo.markedForDeletion": false,
+	}
 
-	return profileProto, nil
+	profileResChan, errChan := s.db.Profile(tenant).FindOne(filter)
+
+	select {
+	case profile := <-profileResChan:
+		profileProto := getProfileProto(profile)
+		return profileProto, nil
+	case err := <-errChan:
+		if err == mongo.ErrNoDocuments {
+			return nil, status.Error(codes.NotFound, "Profile not found")
+		}
+		logger.Error("Failed getting profile", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile")
+	}
 }
 
 func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.GetProfileByPhoneOrEmailRequest) (*pb.UserProfileProto, error) {
@@ -98,10 +118,16 @@ func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.G
 		return nil, status.Error(codes.NotFound, "User not found")
 	}
 
-	// get profile using login id from login in
-	profileResChan, errChan := s.db.Profile(tenant).FindOneById(loginModel.Id())
+	// get profile using userId convert to proto and return it.
+	filter := bson.M{
+		"_id":                            loginModel.Id(),
+		"deletionInfo.markedForDeletion": false,
+	}
+
+	profileResChan, errChan := s.db.Profile(tenant).FindOne(filter)
 	select {
 	case profile := <-profileResChan:
+		fmt.Println("profile", profile)
 		return getProfileProto(profile), nil
 	case err := <-errChan:
 		if err == mongo.ErrNoDocuments {
@@ -135,34 +161,38 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGe
 	}
 }
 
-func (s *ProfileService) RequestProfileDeletion(ctx context.Context, req *pb.DeleteProfileRequest) (*pb.StatusResponse, error) {
+func (s *ProfileService) RequestProfileDeletion(ctx context.Context, req *pb.ProfileDeletionRequest) (*pb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	// Check if profile exists
-	isExists := s.db.Profile(tenant).IsExistsById(userId)
+	// Fetch profile info
+	profileResChan, errChan := s.db.Profile(tenant).FindOneById(userId)
 
-	if !isExists {
-		return &pb.StatusResponse{
-			Status: "Profile not found",
-		}, nil
-	}
-	profileDeletionModel := &models.ProfileDeletionModel{
-		UserId:       userId,
-		DeletionTime: time.Now().Unix(),
-	}
-	err := <-s.db.ProfileDeletion(tenant).Save(profileDeletionModel)
+	select {
+	case profileRes := <-profileResChan:
+		// Save profile deletion request
+		profileRes.DeletionInfo = models.DeletionInfo{
+			MarkedForDeletion: true,
+			DeletionTime:      time.Now().Unix(),
+			Reason:            req.Reason,
+		}
+		err := <-s.db.Profile(tenant).Save(profileRes)
 
-	if err != nil {
-		logger.Error("Failed saving profile deletion request", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
+		if err != nil {
+			logger.Error("Failed saving profile deletion request", zap.Error(err))
+			return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting profile", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile")
 	}
 
 	return &pb.StatusResponse{
-		Status: "Profile deletion request sent",
+		Status: "Profile deletion request sent successfully",
 	}, nil
+
 }
 
-func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, req *pb.PendingProfileDeletionRequest) (*pb.PendingProfileDeletionRequestList, error) {
+func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, req *pb.GetProfileDeletionRequest) (*pb.ProfileListResponse, error) {
 	userID, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
@@ -171,19 +201,34 @@ func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, 
 	}
 
 	// Fetch pending profile deletion requests
-	profileDeletionRequests := s.db.ProfileDeletion(tenant).GetProfileDeletionRequests(int64(req.PageSize), int64(req.PageNumber))
-
-	// convert profile model to proto
-	pendingProfileDeletionRequestList := make([]*pb.PendingProfileDeletionRespone, 0)
-
-	for _, profileDeletionReq := range profileDeletionRequests {
-		pendingProfileDeletionRequestList = append(pendingProfileDeletionRequestList, &pb.PendingProfileDeletionRespone{
-			UserId:       profileDeletionReq.UserId,
-			DeletionTime: profileDeletionReq.DeletionTime,
-		})
+	filter := bson.M{
+		"deletionInfo.markedForDeletion": true,
 	}
 
-	return &pb.PendingProfileDeletionRequestList{PendingProfileDeleteResponse: pendingProfileDeletionRequestList}, nil
+	if req.PageSize == 0 {
+		req.PageSize = 10
+	}
+
+	skip := int64(req.PageNumber * req.PageSize)
+	profileDeletionRequestsChan, errChan := s.db.Profile(tenant).Find(filter, nil, int64(req.PageSize), skip)
+
+	select {
+	case profileDeletionRequests := <-profileDeletionRequestsChan:
+		// convert profile model to proto
+		profileProtoList := make([]*pb.UserProfileProto, 0)
+		fmt.Println("profileDeletionRequests", profileDeletionRequests)
+
+		for _, profile := range profileDeletionRequests {
+			profileProtoList = append(profileProtoList, getProfileProto(&profile))
+		}
+
+		return &pb.ProfileListResponse{
+			Profiles: profileProtoList,
+		}, nil
+	case err := <-errChan:
+		logger.Error("Failed getting profile deletion requests", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile deletion requests")
+	}
 }
 
 func (s *ProfileService) DeleteProfile(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
