@@ -269,6 +269,41 @@ func (s *ProfileService) DeleteProfile(ctx context.Context, req *pb.IdRequest) (
 	}, nil
 }
 
+func (s *ProfileService) CancelProfileDeletionRequest(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
+	}
+
+	// Fetch profile info
+	profileResChan, errChan := s.db.Profile(tenant).FindOneById(req.UserId)
+
+	select {
+	case profileRes := <-profileResChan:
+		// Un mark profile for deletion
+		profileRes.DeletionInfo = models.DeletionInfo{
+			MarkedForDeletion: false,
+			DeletionTime:      0,
+			Reason:            "",
+		}
+		err := <-s.db.Profile(tenant).Save(profileRes)
+
+		if err != nil {
+			logger.Error("Failed saving profile deletion request", zap.Error(err))
+			return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting profile", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile")
+	}
+
+	return &pb.StatusResponse{
+		Status: "Profile deletion request cancelled successfully",
+	}, nil
+}
+
 // check if user is admin or not.
 func (s *ProfileService) IsUserAdmin(ctx context.Context, req *pb.IdRequest) (*pb.IsUserAdminResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
