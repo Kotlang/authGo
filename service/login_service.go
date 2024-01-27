@@ -6,6 +6,7 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
+	"github.com/Kotlang/authGo/models"
 	"github.com/Kotlang/authGo/otp"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
@@ -46,25 +47,27 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
 	}
 
-	// check if user is marked for deletion and return status as failure.
-	isPhone := isPhoneNumber(req.EmailOrPhone)
-	phoneNumber, email := "", ""
-	if isPhone {
-		phoneNumber = req.EmailOrPhone
-	} else {
-		email = req.EmailOrPhone
-	}
+	if !(req.RestoreAccountRequest) {
+		// check if user is marked for deletion and return status as failure.
+		isPhone := isPhoneNumber(req.EmailOrPhone)
+		phoneNumber, email := "", ""
+		if isPhone {
+			phoneNumber = req.EmailOrPhone
+		} else {
+			email = req.EmailOrPhone
+		}
 
-	loginDetails := <-s.db.Login(tenantDetails.Name).FindOneByPhoneOrEmail(phoneNumber, email)
-	if loginDetails != nil {
-		profileResChan, profileErrChan := s.db.Profile(tenantDetails.Name).FindOneById(loginDetails.Id())
-		select {
-		case profile := <-profileResChan:
-			if profile.DeletionInfo.MarkedForDeletion {
-				return &pb.StatusResponse{Status: "Marked for deletion"}, nil
+		loginDetails := <-s.db.Login(tenantDetails.Name).FindOneByPhoneOrEmail(phoneNumber, email)
+		if loginDetails != nil {
+			profileResChan, profileErrChan := s.db.Profile(tenantDetails.Name).FindOneById(loginDetails.Id())
+			select {
+			case profile := <-profileResChan:
+				if profile.DeletionInfo.MarkedForDeletion {
+					return &pb.StatusResponse{Status: "Marked for deletion"}, nil
+				}
+			case err := <-profileErrChan:
+				logger.Error("Error fetching profile", zap.Error(err))
 			}
-		case err := <-profileErrChan:
-			logger.Error("Error fetching profile", zap.Error(err))
 		}
 	}
 
@@ -83,7 +86,7 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 
 	tenantDetails := <-s.db.Tenant().FindOneByToken(req.Domain)
 	if tenantDetails == nil {
-		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
+		return nil, status.Error(codes.PermissionDenied, "Invalid Domain token")
 	}
 
 	loginInfo := s.otp.GetLoginInfo(tenantDetails.Name, req.EmailOrPhone)
@@ -96,6 +99,14 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 	resultChan, errorChan := s.db.Profile(tenantDetails.Name).FindOneById(loginInfo.Id())
 	select {
 	case profile := <-resultChan:
+		profile.DeletionInfo = *&models.DeletionInfo{MarkedForDeletion: false}
+		err := <-s.db.Profile(tenantDetails.Name).Save(profile)
+
+		if err != nil {
+			logger.Error("Internal error when saving Profile with id: "+profile.Id(), zap.Error(err))
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
 		copier.Copy(profileProto, profile)
 	case err := <-errorChan:
 		logger.Error("Error fetching profile", zap.Error(err))
