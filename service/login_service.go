@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"unicode"
 
 	"github.com/Kotlang/authGo/db"
 	pb "github.com/Kotlang/authGo/generated"
@@ -43,6 +44,28 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 	tenantDetails := <-s.db.Tenant().FindOneByToken(req.Domain)
 	if tenantDetails == nil {
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
+	}
+
+	// check if user is marked for deletion and return status as failure.
+	isPhone := isPhoneNumber(req.EmailOrPhone)
+	phoneNumber, email := "", ""
+	if isPhone {
+		phoneNumber = req.EmailOrPhone
+	} else {
+		email = req.EmailOrPhone
+	}
+
+	loginDetails := <-s.db.Login(tenantDetails.Name).FindOneByPhoneOrEmail(phoneNumber, email)
+	if loginDetails != nil {
+		profileResChan, profileErrChan := s.db.Profile(tenantDetails.Name).FindOneById(loginDetails.Id())
+		select {
+		case profile := <-profileResChan:
+			if profile.DeletionInfo.MarkedForDeletion {
+				return &pb.StatusResponse{Status: "Marked for deletion"}, nil
+			}
+		case err := <-profileErrChan:
+			logger.Error("Error fetching profile", zap.Error(err))
+		}
 	}
 
 	err := s.otp.SendOtp(tenantDetails.Name, req.EmailOrPhone)
@@ -87,4 +110,13 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 		UserType: loginInfo.UserType,
 		Profile:  profileProto,
 	}, nil
+}
+
+func isPhoneNumber(emailOrPhone string) bool {
+	for _, c := range emailOrPhone {
+		if !unicode.IsDigit(c) {
+			return false
+		}
+	}
+	return len(emailOrPhone) == 10
 }
