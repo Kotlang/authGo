@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/Kotlang/authGo/db"
@@ -332,7 +333,11 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.P
 
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 	key := fmt.Sprintf("%s/%s/%d.jpg", tenant, userId, time.Now().Unix())
-	preSignedUrl, downloadUrl := s.cloudFns.GetPresignedUrl("kotlang-profile-photos", key, 5*time.Minute)
+	profileBucket := os.Getenv("profile_bucket")
+	if profileBucket == "" {
+		return nil, status.Error(codes.Internal, "profile_bucket is not set")
+	}
+	preSignedUrl, downloadUrl := s.cloudFns.GetPresignedUrl(profileBucket, key, 5*time.Minute)
 	return &pb.ProfileImageUploadURL{
 		UploadUrl:    preSignedUrl,
 		MediaUrl:     downloadUrl,
@@ -369,7 +374,11 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 	file_extension := bootUtils.GetFileExtension(contentType)
 	// upload imageData to Azure bucket.
 	path := fmt.Sprintf("%s/%s/%d.%s", tenant, userId, time.Now().Unix(), file_extension)
-	resultChan, errorChan := s.cloudFns.UploadStream("kotlang-profile-photos", path, imageData)
+	profileBucket := os.Getenv("profile_bucket")
+	if profileBucket == "" {
+		return status.Error(codes.Internal, "profile_bucket is not set")
+	}
+	resultChan, errorChan := s.cloudFns.UploadStream(profileBucket, path, imageData)
 
 	select {
 	case result := <-resultChan:
