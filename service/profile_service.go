@@ -10,9 +10,8 @@ import (
 	pb "github.com/Kotlang/authGo/generated"
 	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
-	"github.com/SaiNageswarS/go-api-boot/aws"
-	"github.com/SaiNageswarS/go-api-boot/azure"
 	"github.com/SaiNageswarS/go-api-boot/bootUtils"
+	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
 	"go.mongodb.org/mongo-driver/bson"
@@ -24,12 +23,14 @@ import (
 
 type ProfileService struct {
 	pb.UnimplementedProfileServer
-	db db.AuthDbInterface
+	db       db.AuthDbInterface
+	cloudFns cloud.Cloud
 }
 
-func NewProfileService(db db.AuthDbInterface) *ProfileService {
+func NewProfileService(db db.AuthDbInterface, cloudFns cloud.Cloud) *ProfileService {
 	return &ProfileService{
-		db: db,
+		db:       db,
+		cloudFns: cloudFns,
 	}
 }
 
@@ -331,7 +332,7 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.P
 
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 	key := fmt.Sprintf("%s/%s/%d.jpg", tenant, userId, time.Now().Unix())
-	preSignedUrl, downloadUrl := aws.S3.GetPresignedUrl("kotlang-assets", key)
+	preSignedUrl, downloadUrl := s.cloudFns.GetPresignedUrl("kotlang-profile-photos", key, 5*time.Minute)
 	return &pb.ProfileImageUploadURL{
 		UploadUrl:    preSignedUrl,
 		MediaUrl:     downloadUrl,
@@ -368,7 +369,7 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 	file_extension := bootUtils.GetFileExtension(contentType)
 	// upload imageData to Azure bucket.
 	path := fmt.Sprintf("%s/%s/%d.%s", tenant, userId, time.Now().Unix(), file_extension)
-	resultChan, errorChan := azure.Storage.UploadStream("profile-photos", path, imageData)
+	resultChan, errorChan := s.cloudFns.UploadStream("kotlang-profile-photos", path, imageData)
 
 	select {
 	case result := <-resultChan:

@@ -5,3 +5,4 @@ vendor
 .env
 azure_secrets
 .vscode
+key.json
