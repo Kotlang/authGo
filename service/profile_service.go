@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/Kotlang/authGo/db"
@@ -332,12 +333,23 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.P
 	| 2. Send mediaUrl in createOrUpdateProfile request.`
 
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
-	key := fmt.Sprintf("%s/%s/%d.jpg", tenant, userId, time.Now().Unix())
+
+	acceptableExtensions := []string{"jpg", "jpeg", "png"}
+	if !slices.Contains(acceptableExtensions, req.MediaExtension) {
+		return nil, status.Error(codes.InvalidArgument, "Invalid media extension")
+	}
+
+	if req.MediaExtension == "" {
+		req.MediaExtension = "jpg"
+	}
+	contentType := fmt.Sprintf("image/%s", req.MediaExtension)
+	key := fmt.Sprintf("%s/%s/%d.%s", tenant, userId, time.Now().Unix(), req.MediaExtension)
 	profileBucket := os.Getenv("profile_bucket")
 	if profileBucket == "" {
 		return nil, status.Error(codes.Internal, "profile_bucket is not set")
 	}
-	preSignedUrl, downloadUrl := s.cloudFns.GetPresignedUrl(profileBucket, key, 5*time.Minute)
+
+	preSignedUrl, downloadUrl := s.cloudFns.GetPresignedUrl(profileBucket, key, contentType, 10*time.Minute)
 	return &pb.ProfileImageUploadURL{
 		UploadUrl:    preSignedUrl,
 		MediaUrl:     downloadUrl,
