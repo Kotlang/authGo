@@ -86,6 +86,8 @@ github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAE
 github.com/OpenPeeDeeP/depguard v1.0.1/go.mod h1:xsIw86fROiiwelg+jB2uM9PiKihMMmUx/1V+TNhjQvM=
 github.com/SaiNageswarS/go-api-boot v0.1.35 h1:pCY2zD3LqFc0chYRw7S0c870TopEGUizP6R6qDT1qcM=
 github.com/SaiNageswarS/go-api-boot v0.1.35/go.mod h1:uDrsW6okI31aO6IhUkfZQGB4rVbOdwVLZDD4eDpF1BY=
+github.com/SaiNageswarS/go-api-boot v0.1.36-0.20240217133706-40a7ba918288 h1:yP6zJ2hZUVsQ/E3XykjmMj6/LsnQFXnCu7VmUlgzUT4=
+github.com/SaiNageswarS/go-api-boot v0.1.36-0.20240217133706-40a7ba918288/go.mod h1:uDrsW6okI31aO6IhUkfZQGB4rVbOdwVLZDD4eDpF1BY=
 github.com/StackExchange/wmi v0.0.0-20180116203802-5d049714c4a6/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
