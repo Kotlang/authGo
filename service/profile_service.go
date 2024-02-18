@@ -53,9 +53,9 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	}
 
 	isNewUser := false
-	if len(oldProfile.LoginId) == 0 {
+	if len(oldProfile.UserId) == 0 {
 		isNewUser = true
-		oldProfile.LoginId = userId
+		oldProfile.UserId = userId
 	}
 
 	// merge old profile and new profile proto

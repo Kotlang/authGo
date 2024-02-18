@@ -25,7 +25,7 @@ type DeletionInfo struct {
 }
 
 type ProfileModel struct {
-	LoginId                  string               `bson:"_id" json:"loginId"`
+	UserId                   string               `bson:"_id" json:"userId"`
 	Name                     string               `bson:"name,omitempty" json:"name"`
 	PhotoUrl                 string               `bson:"photoUrl" json:"photoUrl"`
 	Addresses                map[string]Addresses `bson:"addresses" json:"addresses"`
@@ -44,5 +44,5 @@ type ProfileModel struct {
 }
 
 func (m *ProfileModel) Id() string {
-	return m.LoginId
+	return m.UserId
 }
