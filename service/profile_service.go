@@ -372,7 +372,7 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.P
 	}, nil
 }
 
-// UploadProfileImage uploads profile image to azure bucket with max size of 5mb.
+// UploadProfileImage uploads profile image to cloud bucket with max size of 5mb.
 func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImageServer) error {
 	userId, tenant := auth.GetUserIdAndTenant(stream.Context())
 	logger.Info("Uploading image", zap.String("userId", userId), zap.String("tenant", tenant))
