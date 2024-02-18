@@ -53,9 +53,9 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	}
 
 	isNewUser := false
-	if len(oldProfile.LoginId) == 0 {
+	if len(oldProfile.UserId) == 0 {
 		isNewUser = true
-		oldProfile.LoginId = userId
+		oldProfile.UserId = userId
 	}
 
 	// merge old profile and new profile proto
@@ -108,12 +108,20 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) 
 	}
 }
 
+// GetProfileByPhoneOrEmail returns profile using email or phone and is used by admin only.
 func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.GetProfileByPhoneOrEmailRequest) (*pb.UserProfileProto, error) {
-	_, tenant := auth.GetUserIdAndTenant(ctx)
+	userID, tenant := auth.GetUserIdAndTenant(ctx)
 
+	//validations
 	if req.Email == "" && req.Phone == "" {
 		return nil, status.Error(codes.InvalidArgument, "Email or Phone is required")
 	}
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userID) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userID+" don't have permission")
+	}
+
 	// get login info using email or phone
 	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
 
@@ -126,7 +134,6 @@ func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.G
 		"_id":                            loginModel.Id(),
 		"deletionInfo.markedForDeletion": false,
 	}
-
 	profileResChan, errChan := s.db.Profile(tenant).FindOne(filter)
 	select {
 	case profile := <-profileResChan:
@@ -195,6 +202,7 @@ func (s *ProfileService) RequestProfileDeletion(ctx context.Context, req *pb.Pro
 
 }
 
+// GetPendingProfileDeletionRequests returns all profiles marked for deletion and is used by admin only.
 func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, req *pb.GetProfileDeletionRequest) (*pb.ProfileListResponse, error) {
 	userID, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -234,6 +242,7 @@ func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, 
 	}
 }
 
+// DeleteProfile deletes profile and login from db and is used by admin only.
 func (s *ProfileService) DeleteProfile(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -272,6 +281,7 @@ func (s *ProfileService) DeleteProfile(ctx context.Context, req *pb.IdRequest) (
 	}, nil
 }
 
+// CancelProfileDeletionRequest cancels profile deletion request and is used by admin only.
 func (s *ProfileService) CancelProfileDeletionRequest(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -307,12 +317,17 @@ func (s *ProfileService) CancelProfileDeletionRequest(ctx context.Context, req *
 	}, nil
 }
 
-// check if user is admin or not.
+// check if user is admin or not and return response. Used by admin only.
 func (s *ProfileService) IsUserAdmin(ctx context.Context, req *pb.IdRequest) (*pb.IsUserAdminResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	if len(req.UserId) > 0 {
 		userId = req.UserId
+	}
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
 	}
 
 	isAdmin := s.db.Login(tenant).IsAdmin(userId)
@@ -357,7 +372,7 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.P
 	}, nil
 }
 
-// UploadProfileImage uploads profile image to azure bucket with max size of 5mb.
+// UploadProfileImage uploads profile image to cloud bucket with max size of 5mb.
 func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImageServer) error {
 	userId, tenant := auth.GetUserIdAndTenant(stream.Context())
 	logger.Info("Uploading image", zap.String("userId", userId), zap.String("tenant", tenant))

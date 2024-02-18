@@ -96,15 +96,19 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 
 	// fetch profile for user.
 	profileProto := &pb.UserProfileProto{}
+	print("loginInfo.Id() ", loginInfo.UserId)
 	resultChan, errorChan := s.db.Profile(tenantDetails.Name).FindOneById(loginInfo.Id())
 	select {
 	case profile := <-resultChan:
-		profile.DeletionInfo = *&models.DeletionInfo{MarkedForDeletion: false}
-		err := <-s.db.Profile(tenantDetails.Name).Save(profile)
 
-		if err != nil {
-			logger.Error("Internal error when saving Profile with id: "+profile.Id(), zap.Error(err))
-			return nil, status.Error(codes.Internal, err.Error())
+		if profile.DeletionInfo.MarkedForDeletion {
+			profile.DeletionInfo = models.DeletionInfo{MarkedForDeletion: false}
+			err := <-s.db.Profile(tenantDetails.Name).Save(profile)
+
+			if err != nil {
+				logger.Error("Internal error when saving Profile with id: "+profile.Id(), zap.Error(err))
+				return nil, status.Error(codes.Internal, err.Error())
+			}
 		}
 
 		copier.Copy(profileProto, profile)
