@@ -222,6 +222,15 @@ func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, 
 
 	skip := int64(req.PageNumber * req.PageSize)
 	profileDeletionRequestsChan, errChan := s.db.Profile(tenant).Find(filter, nil, int64(req.PageSize), skip)
+	totalCountResChan, countErrChan := s.db.Profile(tenant).CountDocuments(filter)
+	totalCount := 0
+
+	select {
+	case count := <-totalCountResChan:
+		totalCount = int(count)
+	case err := <-countErrChan:
+		logger.Error("Error fetching user count", zap.Error(err))
+	}
 
 	select {
 	case profileDeletionRequests := <-profileDeletionRequestsChan:
@@ -234,7 +243,8 @@ func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, 
 		}
 
 		return &pb.ProfileListResponse{
-			Profiles: profileProtoList,
+			Profiles:   profileProtoList,
+			TotalUsers: int64(totalCount),
 		}, nil
 	case err := <-errChan:
 		logger.Error("Failed getting profile deletion requests", zap.Error(err))
@@ -436,19 +446,13 @@ func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *mo
 
 func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfilesRequest) (*pb.ProfileListResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
-	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
 
-	select {
-	case loginModel := <-loginModelChan:
-		if loginModel.UserType != "admin" {
-			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
-		}
-	case err := <-errChan:
-		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
 	}
 
-	profiles := s.db.Profile(tenant).GetProfiles(req.Filters, int64(req.PageSize), int64(req.PageNumber))
+	profiles, totalCount := s.db.Profile(tenant).GetProfiles(req.Filters, int64(req.PageSize), int64(req.PageNumber))
 
 	userProfileProto := []*pb.UserProfileProto{}
 
@@ -456,7 +460,7 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfile
 		userProfileProto = append(userProfileProto, getProfileProto(&userModel))
 	}
 
-	response := &pb.ProfileListResponse{Profiles: userProfileProto}
+	response := &pb.ProfileListResponse{Profiles: userProfileProto, TotalUsers: int64(totalCount)}
 	return response, nil
 }
 

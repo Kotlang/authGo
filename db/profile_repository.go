@@ -12,7 +12,7 @@ import (
 type ProfileRepositoryInterface interface {
 	odm.BootRepository[models.ProfileModel]
 	FindByIds(ids []string) (chan []models.ProfileModel, chan error)
-	GetProfiles(userfilters *pb.Userfilters, PageSize, PageNumber int64) []models.ProfileModel
+	GetProfiles(userfilters *pb.Userfilters, PageSize, PageNumber int64) ([]models.ProfileModel, int)
 }
 
 type ProfileRepository struct {
@@ -29,7 +29,7 @@ func (p *ProfileRepository) FindByIds(ids []string) (chan []models.ProfileModel,
 	return p.Find(filter, nil, int64(len(ids)), 0)
 }
 
-func (t *ProfileRepository) GetProfiles(userfilters *pb.Userfilters, PageSize, PageNumber int64) []models.ProfileModel {
+func (t *ProfileRepository) GetProfiles(userfilters *pb.Userfilters, PageSize, PageNumber int64) (profiles []models.ProfileModel, totalCount int) {
 	filters := bson.M{}
 
 	if name := userfilters.Name; name != "" {
@@ -53,12 +53,21 @@ func (t *ProfileRepository) GetProfiles(userfilters *pb.Userfilters, PageSize, P
 	skip := PageNumber * PageSize
 
 	resultChan, errChan := t.Find(filters, nil, PageSize, skip)
+	totalCountResChan, countErrChan := t.CountDocuments(filters)
+	totalCount = 0
+
+	select {
+	case count := <-totalCountResChan:
+		totalCount = int(count)
+	case err := <-countErrChan:
+		logger.Error("Error fetching user count", zap.Error(err))
+	}
 
 	select {
 	case res := <-resultChan:
-		return res
+		return res, totalCount
 	case err := <-errChan:
 		logger.Error("Error fetching user IDs", zap.Error(err))
-		return []models.ProfileModel{}
+		return []models.ProfileModel{}, totalCount
 	}
 }
