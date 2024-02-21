@@ -41,6 +41,7 @@ type ProfileModel struct {
 	CreatedOn                int64                `bson:"createdOn,omitempty" json:"createdOn"`
 	LandSizeInAcres          string               `bson:"landSizeInAcres" json:"landSizeInAcres"`
 	DeletionInfo             DeletionInfo         `bson:"deletionInfo" json:"deletionInfo"`
+	IsBlocked                bool                 `bson:"isBlocked" json:"isBlocked"`
 }
 
 func (m *ProfileModel) Id() string {
