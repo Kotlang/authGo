@@ -503,7 +503,7 @@ func (s *ProfileService) BlockUser(ctx context.Context, req *pb.IdRequest) (*pb.
 	}, nil
 }
 
-func (s *ProfileService) UnBlockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+func (s *ProfileService) UnblockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
