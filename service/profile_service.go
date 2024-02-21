@@ -464,6 +464,35 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfile
 	return response, nil
 }
 
+func (s *ProfileService) ChangeUserType(ctx context.Context, req *pb.ChangeUserTypeRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
+	}
+
+	// fetch login info
+	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
+	if loginModel == nil {
+		return nil, status.Error(codes.NotFound, "User not found")
+	}
+
+	// change user type
+	loginModel.UserType = req.UserType.String()
+
+	// save login info
+	err := <-s.db.Login(tenant).Save(loginModel)
+	if err != nil {
+		logger.Error("Failed changing user type", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed changing user type")
+	}
+
+	return &pb.StatusResponse{
+		Status: "User type changed successfully",
+	}, nil
+}
+
 func (s *ProfileService) BlockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
