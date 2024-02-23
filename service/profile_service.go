@@ -223,8 +223,9 @@ func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, 
 	skip := int64(req.PageNumber * req.PageSize)
 	profileDeletionRequestsChan, errChan := s.db.Profile(tenant).Find(filter, nil, int64(req.PageSize), skip)
 	totalCountResChan, countErrChan := s.db.Profile(tenant).CountDocuments(filter)
-	totalCount := 0
 
+	// get total count of pending profile deletion requests
+	totalCount := 0
 	select {
 	case count := <-totalCountResChan:
 		totalCount = int(count)
@@ -232,24 +233,40 @@ func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, 
 		logger.Error("Error fetching user count", zap.Error(err))
 	}
 
+	// convert profile model to proto
+	var profileProtoList []*pb.UserProfileProto
+	var userIds []string
 	select {
 	case profileDeletionRequests := <-profileDeletionRequestsChan:
-		// convert profile model to proto
-		profileProtoList := make([]*pb.UserProfileProto, 0)
-		fmt.Println("profileDeletionRequests", profileDeletionRequests)
-
 		for _, profile := range profileDeletionRequests {
 			profileProtoList = append(profileProtoList, getProfileProto(&profile))
+			userIds = append(userIds, profile.UserId)
 		}
 
-		return &pb.ProfileListResponse{
-			Profiles:   profileProtoList,
-			TotalUsers: int64(totalCount),
-		}, nil
 	case err := <-errChan:
 		logger.Error("Failed getting profile deletion requests", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profile deletion requests")
 	}
+
+	// get login info using userId
+	loginInfoChan, errChan := s.db.Login(tenant).FindByIds(userIds)
+
+	// populate phone number field in profile proto
+	var loginInfo []models.LoginModel
+	select {
+	case loginInfo = <-loginInfoChan:
+	case <-errChan:
+		logger.Error("Failed getting login info")
+	}
+
+	if len(loginInfo) > 0 {
+		populateLoginInfo(profileProtoList, loginInfo)
+	}
+
+	return &pb.ProfileListResponse{
+		Profiles:   profileProtoList,
+		TotalUsers: int64(totalCount),
+	}, nil
 }
 
 // DeleteProfile deletes profile and login from db and is used by admin only.
@@ -437,10 +454,29 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfile
 
 	profiles, totalCount := s.db.Profile(tenant).GetProfiles(req.Filters, int64(req.PageSize), int64(req.PageNumber))
 
-	userProfileProto := []*pb.UserProfileProto{}
+	userIds := []string{}
+	for _, profile := range profiles {
+		userIds = append(userIds, profile.UserId)
+	}
 
+	// get login info using userId
+	loginInfoChan, errChan := s.db.Login(tenant).FindByIds(userIds)
+
+	userProfileProto := []*pb.UserProfileProto{}
 	for _, userModel := range profiles {
 		userProfileProto = append(userProfileProto, getProfileProto(&userModel))
+	}
+
+	// populate phone number field in profile proto
+	var loginInfo []models.LoginModel
+	select {
+	case loginInfo = <-loginInfoChan:
+	case <-errChan:
+		logger.Error("Failed getting login info")
+	}
+
+	if len(loginInfo) > 0 {
+		populateLoginInfo(userProfileProto, loginInfo)
 	}
 
 	response := &pb.ProfileListResponse{Profiles: userProfileProto, TotalUsers: int64(totalCount)}
@@ -566,4 +602,16 @@ func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *mo
 	}
 
 	return profile
+}
+
+func populateLoginInfo(userProfileProto []*pb.UserProfileProto, loginInfo []models.LoginModel) {
+	for i, profile := range userProfileProto {
+		for _, loginModel := range loginInfo {
+			if profile.UserId == loginModel.UserId {
+				userProfileProto[i].PhoneNumber = loginModel.Phone
+				copier.Copy(&userProfileProto[i], &loginModel)
+				break
+			}
+		}
+	}
 }
