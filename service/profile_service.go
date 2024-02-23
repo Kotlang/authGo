@@ -427,23 +427,6 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 	}
 }
 
-// gets profile for userId or return empty model if doesn't exist.
-func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *models.ProfileModel {
-	profile := &models.ProfileModel{}
-
-	profileResChan, profileErrorChan := db.Profile(tenant).FindOneById(userId)
-
-	// in case of error, return empty profile.
-	select {
-	case profileRes := <-profileResChan:
-		profile = profileRes
-	case <-profileErrorChan:
-		logger.Error("Failed getting profile", zap.String("userId", userId), zap.String("tenant", tenant))
-	}
-
-	return profile
-}
-
 func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfilesRequest) (*pb.ProfileListResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -490,84 +473,6 @@ func (s *ProfileService) ChangeUserType(ctx context.Context, req *pb.ChangeUserT
 
 	return &pb.StatusResponse{
 		Status: "User type changed successfully",
-	}, nil
-}
-
-func (s *ProfileService) BlockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
-	}
-
-	// Check if profile exists
-	isExists := s.db.Profile(tenant).IsExistsById(req.UserId)
-
-	if !isExists {
-		return &pb.StatusResponse{
-			Status: "Profile not found",
-		}, nil
-	}
-
-	// Block user
-	profileResChan, errChan := s.db.Profile(tenant).FindOneById(req.UserId)
-
-	select {
-	case profileRes := <-profileResChan:
-		profileRes.IsBlocked = true
-		err := <-s.db.Profile(tenant).Save(profileRes)
-
-		if err != nil {
-			logger.Error("Failed blocking user", zap.Error(err))
-			return nil, status.Error(codes.Internal, "Failed blocking user")
-		}
-	case err := <-errChan:
-		logger.Error("Failed getting profile", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting profile")
-	}
-
-	return &pb.StatusResponse{
-		Status: "User blocked successfully",
-	}, nil
-}
-
-func (s *ProfileService) UnblockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
-	}
-
-	// Check if profile exists
-	isExists := s.db.Profile(tenant).IsExistsById(req.UserId)
-
-	if !isExists {
-		return &pb.StatusResponse{
-			Status: "Profile not found",
-		}, nil
-	}
-
-	// Block user
-	profileResChan, errChan := s.db.Profile(tenant).FindOneById(req.UserId)
-
-	select {
-	case profileRes := <-profileResChan:
-		profileRes.IsBlocked = false
-		err := <-s.db.Profile(tenant).Save(profileRes)
-
-		if err != nil {
-			logger.Error("Failed blocking user", zap.Error(err))
-			return nil, status.Error(codes.Internal, "Failed blocking user")
-		}
-	case err := <-errChan:
-		logger.Error("Failed getting profile", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting profile")
-	}
-
-	return &pb.StatusResponse{
-		Status: "User blocked successfully",
 	}, nil
 }
 
@@ -644,4 +549,21 @@ func getProfileModel(profileProto *pb.CreateProfileRequest, profileModel *models
 		profileModel.LandSizeInAcres = value
 	}
 	return profileModel
+}
+
+// gets profile for userId or return empty model if doesn't exist.
+func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *models.ProfileModel {
+	profile := &models.ProfileModel{}
+
+	profileResChan, profileErrorChan := db.Profile(tenant).FindOneById(userId)
+
+	// in case of error, return empty profile.
+	select {
+	case profileRes := <-profileResChan:
+		profile = profileRes
+	case <-profileErrorChan:
+		logger.Error("Failed getting profile", zap.String("userId", userId), zap.String("tenant", tenant))
+	}
+
+	return profile
 }
