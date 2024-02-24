@@ -222,24 +222,51 @@ func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, 
 
 	skip := int64(req.PageNumber * req.PageSize)
 	profileDeletionRequestsChan, errChan := s.db.Profile(tenant).Find(filter, nil, int64(req.PageSize), skip)
+	totalCountResChan, countErrChan := s.db.Profile(tenant).CountDocuments(filter)
 
+	// get total count of pending profile deletion requests
+	totalCount := 0
+	select {
+	case count := <-totalCountResChan:
+		totalCount = int(count)
+	case err := <-countErrChan:
+		logger.Error("Error fetching user count", zap.Error(err))
+	}
+
+	// convert profile model to proto
+	var profileProtoList []*pb.UserProfileProto
+	var userIds []string
 	select {
 	case profileDeletionRequests := <-profileDeletionRequestsChan:
-		// convert profile model to proto
-		profileProtoList := make([]*pb.UserProfileProto, 0)
-		fmt.Println("profileDeletionRequests", profileDeletionRequests)
-
 		for _, profile := range profileDeletionRequests {
 			profileProtoList = append(profileProtoList, getProfileProto(&profile))
+			userIds = append(userIds, profile.UserId)
 		}
 
-		return &pb.ProfileListResponse{
-			Profiles: profileProtoList,
-		}, nil
 	case err := <-errChan:
 		logger.Error("Failed getting profile deletion requests", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profile deletion requests")
 	}
+
+	// get login info using userId
+	loginInfoChan, errChan := s.db.Login(tenant).FindByIds(userIds)
+
+	// populate phone number field in profile proto
+	var loginInfo []models.LoginModel
+	select {
+	case loginInfo = <-loginInfoChan:
+	case <-errChan:
+		logger.Error("Failed getting login info")
+	}
+
+	if len(loginInfo) > 0 {
+		populateLoginInfo(profileProtoList, loginInfo)
+	}
+
+	return &pb.ProfileListResponse{
+		Profiles:   profileProtoList,
+		TotalUsers: int64(totalCount),
+	}, nil
 }
 
 // DeleteProfile deletes profile and login from db and is used by admin only.
@@ -417,47 +444,72 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 	}
 }
 
-// gets profile for userId or return empty model if doesn't exist.
-func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *models.ProfileModel {
-	profile := &models.ProfileModel{}
-
-	profileResChan, profileErrorChan := db.Profile(tenant).FindOneById(userId)
-
-	// in case of error, return empty profile.
-	select {
-	case profileRes := <-profileResChan:
-		profile = profileRes
-	case <-profileErrorChan:
-		logger.Error("Failed getting profile", zap.String("userId", userId), zap.String("tenant", tenant))
-	}
-
-	return profile
-}
-
 func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfilesRequest) (*pb.ProfileListResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
-	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
 
-	select {
-	case loginModel := <-loginModelChan:
-		if loginModel.UserType != "admin" {
-			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
-		}
-	case err := <-errChan:
-		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
 	}
 
-	profiles := s.db.Profile(tenant).GetProfiles(req.Filters, int64(req.PageSize), int64(req.PageNumber))
+	profiles, totalCount := s.db.Profile(tenant).GetProfiles(req.Filters, int64(req.PageSize), int64(req.PageNumber))
+
+	userIds := []string{}
+	for _, profile := range profiles {
+		userIds = append(userIds, profile.UserId)
+	}
+
+	// get login info using userId
+	loginInfoChan, errChan := s.db.Login(tenant).FindByIds(userIds)
 
 	userProfileProto := []*pb.UserProfileProto{}
-
 	for _, userModel := range profiles {
 		userProfileProto = append(userProfileProto, getProfileProto(&userModel))
 	}
 
-	response := &pb.ProfileListResponse{Profiles: userProfileProto}
+	// populate phone number field in profile proto
+	var loginInfo []models.LoginModel
+	select {
+	case loginInfo = <-loginInfoChan:
+	case <-errChan:
+		logger.Error("Failed getting login info")
+	}
+
+	if len(loginInfo) > 0 {
+		populateLoginInfo(userProfileProto, loginInfo)
+	}
+
+	response := &pb.ProfileListResponse{Profiles: userProfileProto, TotalUsers: int64(totalCount)}
 	return response, nil
+}
+
+func (s *ProfileService) ChangeUserType(ctx context.Context, req *pb.ChangeUserTypeRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
+	}
+
+	// fetch login info
+	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
+	if loginModel == nil {
+		return nil, status.Error(codes.NotFound, "User not found")
+	}
+
+	// change user type
+	loginModel.UserType = req.UserType.String()
+
+	// save login info
+	err := <-s.db.Login(tenant).Save(loginModel)
+	if err != nil {
+		logger.Error("Failed changing user type", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed changing user type")
+	}
+
+	return &pb.StatusResponse{
+		Status: "User type changed successfully",
+	}, nil
 }
 
 // get profile proto from profile model
@@ -533,4 +585,33 @@ func getProfileModel(profileProto *pb.CreateProfileRequest, profileModel *models
 		profileModel.LandSizeInAcres = value
 	}
 	return profileModel
+}
+
+// gets profile for userId or return empty model if doesn't exist.
+func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *models.ProfileModel {
+	profile := &models.ProfileModel{}
+
+	profileResChan, profileErrorChan := db.Profile(tenant).FindOneById(userId)
+
+	// in case of error, return empty profile.
+	select {
+	case profileRes := <-profileResChan:
+		profile = profileRes
+	case <-profileErrorChan:
+		logger.Error("Failed getting profile", zap.String("userId", userId), zap.String("tenant", tenant))
+	}
+
+	return profile
+}
+
+func populateLoginInfo(userProfileProto []*pb.UserProfileProto, loginInfo []models.LoginModel) {
+	for i, profile := range userProfileProto {
+		for _, loginModel := range loginInfo {
+			if profile.UserId == loginModel.UserId {
+				userProfileProto[i].PhoneNumber = loginModel.Phone
+				copier.Copy(&userProfileProto[i], &loginModel)
+				break
+			}
+		}
+	}
 }
