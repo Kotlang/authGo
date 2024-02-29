@@ -69,6 +69,11 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 				logger.Error("Error fetching profile", zap.Error(err))
 			}
 		}
+
+		if req.AlreadyExists && loginDetails == nil {
+			return nil, status.Error(codes.Unauthenticated, "User does not exist")
+		}
+
 	}
 
 	err := s.otp.SendOtp(tenantDetails.Name, req.EmailOrPhone)
