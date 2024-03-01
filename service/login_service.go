@@ -70,8 +70,8 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 			}
 		}
 
-		if req.AlreadyExists && loginDetails == nil {
-			return nil, status.Error(codes.Unauthenticated, "User does not exist")
+		if req.BlockUnknown && loginDetails == nil {
+			return nil, status.Error(codes.NotFound, "User does not exist")
 		}
 
 	}
