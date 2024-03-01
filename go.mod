@@ -2,6 +2,8 @@ module github.com/Kotlang/authGo
 
 go 1.19
 
+replace github.com/SaiNageswarS/go-api-boot v0.1.36-0.20240217133706-40a7ba918288 => ../go-api-boot
+
 require (
 	github.com/SaiNageswarS/go-api-boot v0.1.36-0.20240217133706-40a7ba918288
 	github.com/google/uuid v1.5.0

@@ -2,9 +2,11 @@ package main
 
 import (
 	"github.com/Kotlang/authGo/db"
+	"github.com/Kotlang/authGo/interceptors"
 	"github.com/Kotlang/authGo/otp"
 	"github.com/Kotlang/authGo/service"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
+	"google.golang.org/grpc"
 )
 
 type Inject struct {
@@ -15,6 +17,8 @@ type Inject struct {
 	LoginService         *service.LoginService
 	ProfileService       *service.ProfileService
 	ProfileMasterService *service.ProfileMasterService
+	UnaryInterceptors    []grpc.UnaryServerInterceptor
+	StreamInterceptors   []grpc.StreamServerInterceptor
 }
 
 func NewInject() *Inject {
@@ -23,6 +27,7 @@ func NewInject() *Inject {
 	inj.CloudFns = &cloud.GCP{}
 
 	inj.Otp = otp.NewOtpClient(inj.AuthDb)
+	inj.UnaryInterceptors = append([]grpc.UnaryServerInterceptor{}, interceptors.UserExistsInterceptor(inj.AuthDb))
 
 	inj.LoginService = service.NewLoginService(inj.AuthDb, inj.Otp)
 	inj.ProfileService = service.NewProfileService(inj.AuthDb, inj.CloudFns)
