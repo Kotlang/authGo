@@ -512,6 +512,68 @@ func (s *ProfileService) ChangeUserType(ctx context.Context, req *pb.ChangeUserT
 	}, nil
 }
 
+func (s *ProfileService) BlockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
+	}
+
+	// fetch profile info
+	profileResChan, errChan := s.db.Profile(tenant).FindOneById(req.UserId)
+
+	select {
+	case profileRes := <-profileResChan:
+		// block user
+		profileRes.IsBlocked = true
+		err := <-s.db.Profile(tenant).Save(profileRes)
+
+		if err != nil {
+			logger.Error("Failed blocking user", zap.Error(err))
+			return nil, status.Error(codes.Internal, "Failed blocking user")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting profile", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile")
+	}
+
+	return &pb.StatusResponse{
+		Status: "User blocked successfully",
+	}, nil
+}
+
+func (s *ProfileService) UnblockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
+	}
+
+	// fetch profile info
+	profileResChan, errChan := s.db.Profile(tenant).FindOneById(req.UserId)
+
+	select {
+	case profileRes := <-profileResChan:
+		// unblock user
+		profileRes.IsBlocked = false
+		err := <-s.db.Profile(tenant).Save(profileRes)
+
+		if err != nil {
+			logger.Error("Failed unblocking user", zap.Error(err))
+			return nil, status.Error(codes.Internal, "Failed unblocking user")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting profile", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile")
+	}
+
+	return &pb.StatusResponse{
+		Status: "User unblocked successfully",
+	}, nil
+}
+
 // get profile proto from profile model
 func getProfileProto(profileModel *models.ProfileModel) *pb.UserProfileProto {
 	result := &pb.UserProfileProto{}
