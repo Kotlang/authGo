@@ -42,6 +42,7 @@ type ProfileModel struct {
 	LandSizeInAcres          string               `bson:"landSizeInAcres" json:"landSizeInAcres"`
 	DeletionInfo             DeletionInfo         `bson:"deletionInfo" json:"deletionInfo"`
 	IsBlocked                bool                 `bson:"isBlocked" json:"isBlocked"`
+	LastActive               int64                `bson:"lastActive" json:"lastActive"`
 }
 
 func (m *ProfileModel) Id() string {

@@ -27,8 +27,8 @@ func NewInject() *Inject {
 	inj.CloudFns = &cloud.GCP{}
 
 	inj.Otp = otp.NewOtpClient(inj.AuthDb)
-	inj.UnaryInterceptors = append([]grpc.UnaryServerInterceptor{}, interceptors.UserExistsUnaryInterceptor(inj.AuthDb))
-	inj.StreamInterceptors = append([]grpc.StreamServerInterceptor{}, interceptors.UserExistsStreamInterceptor(inj.AuthDb))
+	inj.UnaryInterceptors = append([]grpc.UnaryServerInterceptor{}, interceptors.UserExistsAndUpdateLastActiveUnaryInterceptor(inj.AuthDb))
+	inj.StreamInterceptors = append([]grpc.StreamServerInterceptor{}, interceptors.UserExistsAndUpdateLastActiveStreamInterceptor(inj.AuthDb))
 
 	inj.LoginService = service.NewLoginService(inj.AuthDb, inj.Otp)
 	inj.ProfileService = service.NewProfileService(inj.AuthDb, inj.CloudFns)
