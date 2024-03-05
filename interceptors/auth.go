@@ -43,7 +43,7 @@ func UserExistsAndUpdateLastActiveUnaryInterceptor(db db.AuthDbInterface) grpc.U
 			}
 
 			login.LastActive = time.Now().Unix()
-			err := <-db.Profile(tenant).Save(login)
+			err := <-db.Login(tenant).Save(login)
 			if err != nil {
 				logger.Error("Error updating last active time", zap.String("userId", userId), zap.Error(err))
 			}
@@ -81,7 +81,7 @@ func UserExistsAndUpdateLastActiveStreamInterceptor(db db.AuthDbInterface) grpc.
 			}
 
 			login.LastActive = time.Now().Unix()
-			err := <-db.Profile(tenant).Save(login)
+			err := <-db.Login(tenant).Save(login)
 			if err != nil {
 				logger.Error("Error updating last active time", zap.String("userId", userId), zap.Error(err))
 			}
@@ -96,14 +96,14 @@ func UserExistsAndUpdateLastActiveStreamInterceptor(db db.AuthDbInterface) grpc.
 	}
 }
 
-func checkUserExistenceAndStatus(profile *models.LoginModel) error {
-	if profile.IsBlocked {
-		logger.Error("User is blocked", zap.String("userId", profile.UserId))
+func checkUserExistenceAndStatus(loginInfo *models.LoginModel) error {
+	if loginInfo.IsBlocked {
+		logger.Error("User is blocked", zap.String("userId", loginInfo.UserId))
 		return status.Error(codes.PermissionDenied, "User is blocked")
 	}
 
-	if profile.DeletionInfo.MarkedForDeletion {
-		logger.Error("User is marked for deletion", zap.String("userId", profile.UserId))
+	if loginInfo.DeletionInfo.MarkedForDeletion {
+		logger.Error("User is marked for deletion", zap.String("userId", loginInfo.UserId))
 		return status.Error(codes.PermissionDenied, "User is marked for deletion")
 	}
 	return nil
