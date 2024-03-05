@@ -29,6 +29,7 @@ func NewLoginVerifiedService(
 	}
 }
 
+// RequestProfileDeletion marks profile for deletion and is used by the client
 func (s *LoginVerifiedService) RequestProfileDeletion(ctx context.Context, req *pb.ProfileDeletionRequest) (*pb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -58,6 +59,43 @@ func (s *LoginVerifiedService) RequestProfileDeletion(ctx context.Context, req *
 	}, nil
 }
 
+// Admin only API
+// CancelProfileDeletionRequest cancels profile deletion request and is used by admin only.
+func (s *LoginVerifiedService) CancelProfileDeletionRequest(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
+	}
+
+	// Fetch profile info
+	loginResChan, errChan := s.db.Login(tenant).FindOneById(req.UserId)
+
+	select {
+	case loginRes := <-loginResChan:
+		// Cancel profile deletion request
+		loginRes.DeletionInfo = models.DeletionInfo{
+			MarkedForDeletion: false,
+			DeletionTime:      0,
+			Reason:            "",
+		}
+		err := <-s.db.Login(tenant).Save(loginRes)
+		if err != nil {
+			logger.Error("Failed saving profile deletion request", zap.Error(err))
+			return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting login", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile")
+	}
+
+	return &pb.StatusResponse{
+		Status: "Profile deletion request cancelled successfully",
+	}, nil
+}
+
+// Admin only API
 // GetPendingProfileDeletionRequests returns all profiles marked for deletion and is used by admin only.
 func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Context, req *pb.GetProfileDeletionRequest) (*pb.ProfileListResponse, error) {
 	userID, tenant := auth.GetUserIdAndTenant(ctx)
@@ -89,11 +127,10 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 		logger.Error("Error fetching user count", zap.Error(err))
 	}
 
-	login := []models.LoginModel{}
+	var login []models.LoginModel
 	userIds := []string{}
 	select {
-	case res := <-loginResChan:
-		login = res
+	case login = <-loginResChan:
 		for _, l := range login {
 			userIds = append(userIds, l.Id())
 		}
@@ -107,7 +144,9 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 	select {
 	case profiles := <-profileResChan:
 		profileProto := []*pb.UserProfileProto{}
-		copier.Copy(&profileProto, &profiles)
+		for _, profile := range profiles {
+			profileProto = append(profileProto, getProfileProto(&profile))
+		}
 		populateLoginInfo(profileProto, login)
 
 		return &pb.ProfileListResponse{
@@ -118,9 +157,9 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 		logger.Error("Error fetching profiles", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Error fetching profiles")
 	}
-
 }
 
+// Admin only API
 // DeleteProfile deletes profile and login from db and is used by admin only.
 func (s *LoginVerifiedService) DeleteProfile(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
@@ -160,42 +199,8 @@ func (s *LoginVerifiedService) DeleteProfile(ctx context.Context, req *pb.IdRequ
 	}, nil
 }
 
-// CancelProfileDeletionRequest cancels profile deletion request and is used by admin only.
-func (s *LoginVerifiedService) CancelProfileDeletionRequest(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
-	}
-
-	// Fetch profile info
-	loginResChan, errChan := s.db.Login(tenant).FindOneById(req.UserId)
-
-	select {
-	case loginRes := <-loginResChan:
-		// Cancel profile deletion request
-		loginRes.DeletionInfo = models.DeletionInfo{
-			MarkedForDeletion: false,
-			DeletionTime:      0,
-			Reason:            "",
-		}
-		err := <-s.db.Login(tenant).Save(loginRes)
-		if err != nil {
-			logger.Error("Failed saving profile deletion request", zap.Error(err))
-			return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
-		}
-	case err := <-errChan:
-		logger.Error("Failed getting login", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting profile")
-	}
-
-	return &pb.StatusResponse{
-		Status: "Profile deletion request cancelled successfully",
-	}, nil
-}
-
-// check if user is admin or not and return response. Used by admin only.
+// Admin only API
+// check if user is admin or not and return response.
 func (s *LoginVerifiedService) IsUserAdmin(ctx context.Context, req *pb.IdRequest) (*pb.IsUserAdminResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -212,6 +217,96 @@ func (s *LoginVerifiedService) IsUserAdmin(ctx context.Context, req *pb.IdReques
 
 	return &pb.IsUserAdminResponse{
 		IsAdmin: isAdmin,
+	}, nil
+}
+
+// Admin only API
+func (s *LoginVerifiedService) ChangeUserType(ctx context.Context, req *pb.ChangeUserTypeRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
+	}
+
+	// fetch login info
+	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
+	if loginModel == nil {
+		return nil, status.Error(codes.NotFound, "User not found")
+	}
+
+	// change user type
+	loginModel.UserType = req.UserType.String()
+
+	// save login info
+	err := <-s.db.Login(tenant).Save(loginModel)
+	if err != nil {
+		logger.Error("Failed changing user type", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed changing user type")
+	}
+
+	return &pb.StatusResponse{
+		Status: "User type changed successfully",
+	}, nil
+}
+
+// Admin only API
+// BlockUser blocks user.
+func (s *LoginVerifiedService) BlockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
+	}
+
+	// fetch login info
+	loginResChan, errChan := s.db.Login(tenant).FindOneById(req.UserId)
+	select {
+	case loginRes := <-loginResChan:
+		// block user
+		loginRes.IsBlocked = true
+		err := <-s.db.Login(tenant).Save(loginRes)
+		if err != nil {
+			logger.Error("Failed blocking user", zap.Error(err))
+			return nil, status.Error(codes.Internal, "Failed blocking user")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting login", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login")
+	}
+	return &pb.StatusResponse{
+		Status: "User blocked successfully",
+	}, nil
+}
+
+// Admin only API
+// UnblockUser unblocks user.
+func (s *LoginVerifiedService) UnblockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+	userId, tenant := auth.GetUserIdAndTenant(ctx)
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userId) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
+	}
+
+	// fetch login info
+	loginResChan, errChan := s.db.Login(tenant).FindOneById(req.UserId)
+	select {
+	case loginRes := <-loginResChan:
+		// unblock user
+		loginRes.IsBlocked = false
+		err := <-s.db.Login(tenant).Save(loginRes)
+		if err != nil {
+			logger.Error("Failed unblocking user", zap.Error(err))
+			return nil, status.Error(codes.Internal, "Failed unblocking user")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting login", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login")
+	}
+	return &pb.StatusResponse{
+		Status: "User unblocked successfully",
 	}, nil
 }
 
