@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"os"
 	"unicode"
 
 	"github.com/Kotlang/authGo/db"
@@ -37,6 +38,11 @@ func (u *LoginService) AuthFuncOverride(ctx context.Context, fullMethodName stri
 	return ctx, nil
 }
 
+// removing the check user existence interceptor
+func (u *LoginService) CheckUserExistenceOverride(ctx context.Context) (context.Context, error) {
+	return ctx, nil
+}
+
 func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.StatusResponse, error) {
 	if len(req.Domain) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
@@ -47,40 +53,45 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
 	}
 
-	if !(req.RestoreAccountRequest) {
-		// check if user is marked for deletion and return status as failure.
-		isPhone := isPhoneNumber(req.EmailOrPhone)
-		phoneNumber, email := "", ""
-		if isPhone {
-			phoneNumber = req.EmailOrPhone
-		} else {
-			email = req.EmailOrPhone
-		}
-
-		loginDetails := <-s.db.Login(tenantDetails.Name).FindOneByPhoneOrEmail(phoneNumber, email)
-		if loginDetails != nil {
-			profileResChan, profileErrChan := s.db.Profile(tenantDetails.Name).FindOneById(loginDetails.Id())
-			select {
-			case profile := <-profileResChan:
-				if profile.DeletionInfo.MarkedForDeletion {
-					return &pb.StatusResponse{Status: "Marked for deletion"}, nil
-				}
-			case err := <-profileErrChan:
-				logger.Error("Error fetching profile", zap.Error(err))
-			}
-		}
-
-		if req.BlockUnknown && loginDetails == nil {
-			return nil, status.Error(codes.NotFound, "User does not exist")
-		}
-
+	// get login details by phone or email
+	isPhone := isPhoneNumber(req.EmailOrPhone)
+	var loginDetails *models.LoginModel
+	if isPhone {
+		loginDetails = <-s.db.Login(tenantDetails.Name).FindOneByPhoneOrEmail(req.EmailOrPhone, "")
+	} else {
+		loginDetails = <-s.db.Login(tenantDetails.Name).FindOneByPhoneOrEmail("", req.EmailOrPhone)
 	}
 
+	// check if user is blocked, if yes return error
+	if loginDetails != nil && loginDetails.IsBlocked {
+		return nil, status.Error(codes.PermissionDenied, "User is blocked")
+	}
+
+	// if user does not exist and block unknown is true, return error
+	if req.BlockUnknown && loginDetails == nil {
+		return nil, status.Error(codes.NotFound, "User does not exist")
+	}
+
+	// if request is not to restore account and account is marked for deletion, return error
+	if loginDetails != nil && !req.RestoreAccountRequest {
+
+		// if user is marked for deletion, return error
+		if loginDetails.DeletionInfo.MarkedForDeletion {
+			return nil, status.Error(codes.PermissionDenied, "User is marked for deletion")
+		}
+	}
+
+	// if phone number is excluded from verification, donot send otp and return success
+	phoneNumberToExcludeVerification := os.Getenv("PHONE_NUMBER_TO_EXCLUDE_VERIFICATION")
+	if req.EmailOrPhone == phoneNumberToExcludeVerification {
+		return &pb.StatusResponse{Status: "success"}, nil
+	}
+
+	// send otp
 	err := s.otp.SendOtp(tenantDetails.Name, req.EmailOrPhone)
 	if err != nil {
 		return nil, err
 	}
-
 	return &pb.StatusResponse{Status: "success"}, nil
 }
 
@@ -95,27 +106,44 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 	}
 
 	loginInfo := s.otp.GetLoginInfo(tenantDetails.Name, req.EmailOrPhone)
-	if loginInfo == nil || !s.otp.ValidateOtp(tenantDetails.Name, req.EmailOrPhone, req.Otp) {
+
+	// if phone number is excluded from verification, donot send otp
+	phoneNumberToExcludeVerification := os.Getenv("PHONE_NUMBER_TO_EXCLUDE_VERIFICATION")
+	if req.EmailOrPhone != phoneNumberToExcludeVerification {
+		if loginInfo == nil || !s.otp.ValidateOtp(tenantDetails.Name, req.EmailOrPhone, req.Otp) {
+			return nil, status.Error(codes.PermissionDenied, "Wrong OTP")
+		}
+	}
+
+	// if phone number is excluded from verification check if otp is 666666
+	if req.EmailOrPhone == phoneNumberToExcludeVerification && req.Otp != "666666" {
 		return nil, status.Error(codes.PermissionDenied, "Wrong OTP")
+	}
+
+	// if user is blocked return error
+	if loginInfo != nil && loginInfo.IsBlocked {
+		return nil, status.Error(codes.PermissionDenied, "User is blocked")
+	}
+
+	// if deletion info is marked for deletion, update the deletion info
+	if loginInfo != nil && loginInfo.DeletionInfo.MarkedForDeletion {
+		loginInfo.DeletionInfo.MarkedForDeletion = false
+		loginInfo.DeletionInfo.Reason = ""
+		loginInfo.DeletionInfo.DeletionTime = 0
+
+		// save the login info
+		err := <-s.db.Login(tenantDetails.Name).Save(loginInfo)
+
+		if err != nil {
+			logger.Error("Error saving login info", zap.Error(err))
+		}
 	}
 
 	// fetch profile for user.
 	profileProto := &pb.UserProfileProto{}
-	print("loginInfo.Id() ", loginInfo.UserId)
 	resultChan, errorChan := s.db.Profile(tenantDetails.Name).FindOneById(loginInfo.Id())
 	select {
 	case profile := <-resultChan:
-
-		if profile.DeletionInfo.MarkedForDeletion {
-			profile.DeletionInfo = models.DeletionInfo{MarkedForDeletion: false}
-			err := <-s.db.Profile(tenantDetails.Name).Save(profile)
-
-			if err != nil {
-				logger.Error("Internal error when saving Profile with id: "+profile.Id(), zap.Error(err))
-				return nil, status.Error(codes.Internal, err.Error())
-			}
-		}
-
 		copier.Copy(profileProto, profile)
 	case err := <-errorChan:
 		logger.Error("Error fetching profile", zap.Error(err))

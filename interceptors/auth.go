@@ -8,40 +8,42 @@ import (
 	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-func checkUserExistenceAndStatus(profile *models.ProfileModel) error {
-	if profile.IsBlocked {
-		logger.Error("User is blocked", zap.String("userId", profile.UserId))
-		return status.Error(codes.PermissionDenied, "User is blocked")
-	}
-
-	if profile.DeletionInfo.MarkedForDeletion {
-		logger.Error("User is marked for deletion", zap.String("userId", profile.UserId))
-		return status.Error(codes.PermissionDenied, "User is marked for deletion")
-	}
-	return nil
+type ServiceCheckUserExistenceInterceptor interface {
+	CheckUserExistenceOverride(ctx context.Context) (context.Context, error)
 }
 
 // checks if the user exists and updates the last active time of the user
 func UserExistsAndUpdateLastActiveUnaryInterceptor(db db.AuthDbInterface) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+
+		// check if the service has overridden the interceptor
+		if overrideService, ok := info.Server.(ServiceCheckUserExistenceInterceptor); ok {
+			newCtx, err := overrideService.CheckUserExistenceOverride(ctx)
+			if err != nil {
+				return nil, err
+			}
+			ctx = newCtx
+			return handler(ctx, req)
+		}
+
 		userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-		profileChan, errChan := db.Profile(tenant).FindOneById(userId)
+		loginResChan, errChan := db.Login(tenant).FindOneById(userId)
 		select {
-		case profile := <-profileChan:
+		case login := <-loginResChan:
 
-			if err := checkUserExistenceAndStatus(profile); err != nil {
+			if err := checkUserExistenceAndStatus(login); err != nil {
 				return nil, err
 			}
 
-			profile.LastActive = time.Now().Unix()
-			err := <-db.Profile(tenant).Save(profile)
+			login.LastActive = time.Now().Unix()
+			err := <-db.Profile(tenant).Save(login)
 			if err != nil {
 				logger.Error("Error updating last active time", zap.String("userId", userId), zap.Error(err))
 			}
@@ -57,21 +59,34 @@ func UserExistsAndUpdateLastActiveUnaryInterceptor(db db.AuthDbInterface) grpc.U
 
 func UserExistsAndUpdateLastActiveStreamInterceptor(db db.AuthDbInterface) grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		userId, tenant := auth.GetUserIdAndTenant(stream.Context())
-		profileChan, errChan := db.Profile(tenant).FindOneById(userId)
-		select {
-		case profile := <-profileChan:
 
-			if err := checkUserExistenceAndStatus(profile); err != nil {
+		// check if the service has overridden the interceptor
+		if overrideService, ok := srv.(ServiceCheckUserExistenceInterceptor); ok {
+			newCtx, err := overrideService.CheckUserExistenceOverride(stream.Context())
+			if err != nil {
+				return err
+			}
+			wrapped := grpc_middleware.WrapServerStream(stream)
+			wrapped.WrappedContext = newCtx
+			return handler(srv, wrapped)
+		}
+
+		userId, tenant := auth.GetUserIdAndTenant(stream.Context())
+		loginResChan, errChan := db.Login(tenant).FindOneById(userId)
+		select {
+		case login := <-loginResChan:
+
+			if err := checkUserExistenceAndStatus(login); err != nil {
 				return err
 			}
 
-			profile.LastActive = time.Now().Unix()
-			err := <-db.Profile(tenant).Save(profile)
+			login.LastActive = time.Now().Unix()
+			err := <-db.Profile(tenant).Save(login)
 			if err != nil {
 				logger.Error("Error updating last active time", zap.String("userId", userId), zap.Error(err))
 			}
 		case err := <-errChan:
+
 			logger.Error("User not found", zap.String("userId", userId), zap.Error(err))
 			return status.Error(codes.NotFound, "User not found")
 		}
@@ -79,4 +94,17 @@ func UserExistsAndUpdateLastActiveStreamInterceptor(db db.AuthDbInterface) grpc.
 		err := handler(srv, stream)
 		return err
 	}
+}
+
+func checkUserExistenceAndStatus(profile *models.LoginModel) error {
+	if profile.IsBlocked {
+		logger.Error("User is blocked", zap.String("userId", profile.UserId))
+		return status.Error(codes.PermissionDenied, "User is blocked")
+	}
+
+	if profile.DeletionInfo.MarkedForDeletion {
+		logger.Error("User is marked for deletion", zap.String("userId", profile.UserId))
+		return status.Error(codes.PermissionDenied, "User is marked for deletion")
+	}
+	return nil
 }
