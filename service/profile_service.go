@@ -16,7 +16,6 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -36,6 +35,8 @@ func NewProfileService(db db.AuthDbInterface, cloudFns cloud.Cloud) *ProfileServ
 	}
 }
 
+// CreateOrUpdateProfile creates or updates profile for user.
+// All the fields are optional and only the fields except name. Fields provided in request will be updated.
 func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.CreateProfileRequest) (*pb.UserProfileProto, error) {
 	err := ValidateProfileRequest(req)
 	if err != nil {
@@ -46,11 +47,6 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 
 	// get existing profile
 	oldProfile := getExistingOrEmptyProfile(s.db, tenant, userId)
-
-	// check if profile is marked for deletion
-	if oldProfile != nil && oldProfile.DeletionInfo.MarkedForDeletion {
-		return nil, status.Error(codes.PermissionDenied, "Profile marked for deletion")
-	}
 
 	isNewUser := false
 	if len(oldProfile.UserId) == 0 {
@@ -80,6 +76,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 	return userProfileProto, err
 }
 
+// GetProfile returns profile for user. checks if user is blocked or marked for deletion.
 func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) (*pb.UserProfileProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -87,14 +84,22 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) 
 		userId = req.UserId
 	}
 
-	// get profile using userId convert to proto and return it.
-	filter := bson.M{
-		"_id":                            userId,
-		"deletionInfo.markedForDeletion": false,
+	loginResChan, errChan := s.db.Login(tenant).FindOneById(userId)
+
+	select {
+	case login := <-loginResChan:
+		if login.DeletionInfo.MarkedForDeletion {
+			return nil, status.Error(codes.PermissionDenied, "Profile Marked for Deletion")
+		}
+
+		if login.IsBlocked {
+			return nil, status.Error(codes.PermissionDenied, "User is blocked")
+		}
+	case err := <-errChan:
+		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
 	}
 
-	profileResChan, errChan := s.db.Profile(tenant).FindOne(filter)
-
+	profileResChan, errChan := s.db.Profile(tenant).FindOneById(userId)
 	select {
 	case profile := <-profileResChan:
 		profileProto := getProfileProto(profile)
@@ -108,50 +113,30 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) 
 	}
 }
 
-// GetProfileByPhoneOrEmail returns profile using email or phone and is used by admin only.
-func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.GetProfileByPhoneOrEmailRequest) (*pb.UserProfileProto, error) {
-	userID, tenant := auth.GetUserIdAndTenant(ctx)
-
-	//validations
-	if req.Email == "" && req.Phone == "" {
-		return nil, status.Error(codes.InvalidArgument, "Email or Phone is required")
-	}
-
-	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userID) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userID+" don't have permission")
-	}
-
-	// get login info using email or phone
-	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
-
-	if loginModel == nil {
-		return nil, status.Error(codes.NotFound, "User not found")
-	}
-
-	// get profile using userId convert to proto and return it.
-	filter := bson.M{
-		"_id":                            loginModel.Id(),
-		"deletionInfo.markedForDeletion": false,
-	}
-	profileResChan, errChan := s.db.Profile(tenant).FindOne(filter)
-	select {
-	case profile := <-profileResChan:
-		fmt.Println("profile", profile)
-		return getProfileProto(profile), nil
-	case err := <-errChan:
-		if err == mongo.ErrNoDocuments {
-			return nil, status.Error(codes.NotFound, "Profile not found")
-		}
-		logger.Error("Failed getting profile", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting profile")
-	}
-}
-
+// BulkGetProfileByIds returns profiles for given user ids.
+// Login info is fetched first and then profile info is fetched using userIds which are not marked for deletion or blocked.
 func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGetProfileRequest) (*pb.ProfileListResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
-	profileResChan, profileErrorChan := s.db.Profile(tenant).FindByIds(req.UserIds)
+	// login info
+	loginResChan, errChan := s.db.Login(tenant).FindByIds(req.UserIds)
+	var loginInfo []models.LoginModel
+	select {
+	case loginInfo = <-loginResChan:
+	case <-errChan:
+		logger.Error("Failed getting login info")
+		return nil, status.Error(codes.Internal, "Failed getting login info")
+	}
+
+	// profile info
+	userIds := []string{}
+	for _, login := range loginInfo {
+		if !login.DeletionInfo.MarkedForDeletion && !login.IsBlocked {
+			userIds = append(userIds, login.UserId)
+		}
+	}
+
+	profileResChan, profileErrorChan := s.db.Profile(tenant).FindByIds(userIds)
 
 	select {
 	case profileRes := <-profileResChan:
@@ -171,199 +156,7 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGe
 	}
 }
 
-func (s *ProfileService) RequestProfileDeletion(ctx context.Context, req *pb.ProfileDeletionRequest) (*pb.StatusResponse, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	// Fetch profile info
-	profileResChan, errChan := s.db.Profile(tenant).FindOneById(userId)
-
-	select {
-	case profileRes := <-profileResChan:
-		// Save profile deletion request
-		profileRes.DeletionInfo = models.DeletionInfo{
-			MarkedForDeletion: true,
-			DeletionTime:      time.Now().Unix(),
-			Reason:            req.Reason,
-		}
-		err := <-s.db.Profile(tenant).Save(profileRes)
-
-		if err != nil {
-			logger.Error("Failed saving profile deletion request", zap.Error(err))
-			return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
-		}
-	case err := <-errChan:
-		logger.Error("Failed getting profile", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting profile")
-	}
-
-	return &pb.StatusResponse{
-		Status: "Profile deletion request sent successfully",
-	}, nil
-
-}
-
-// GetPendingProfileDeletionRequests returns all profiles marked for deletion and is used by admin only.
-func (s *ProfileService) GetPendingProfileDeletionRequests(ctx context.Context, req *pb.GetProfileDeletionRequest) (*pb.ProfileListResponse, error) {
-	userID, tenant := auth.GetUserIdAndTenant(ctx)
-
-	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userID) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userID+" don't have permission")
-	}
-
-	// Fetch pending profile deletion requests
-	filter := bson.M{
-		"deletionInfo.markedForDeletion": true,
-	}
-
-	if req.PageSize == 0 {
-		req.PageSize = 10
-	}
-
-	skip := int64(req.PageNumber * req.PageSize)
-	profileDeletionRequestsChan, errChan := s.db.Profile(tenant).Find(filter, nil, int64(req.PageSize), skip)
-	totalCountResChan, countErrChan := s.db.Profile(tenant).CountDocuments(filter)
-
-	// get total count of pending profile deletion requests
-	totalCount := 0
-	select {
-	case count := <-totalCountResChan:
-		totalCount = int(count)
-	case err := <-countErrChan:
-		logger.Error("Error fetching user count", zap.Error(err))
-	}
-
-	// convert profile model to proto
-	var profileProtoList []*pb.UserProfileProto
-	var userIds []string
-	select {
-	case profileDeletionRequests := <-profileDeletionRequestsChan:
-		for _, profile := range profileDeletionRequests {
-			profileProtoList = append(profileProtoList, getProfileProto(&profile))
-			userIds = append(userIds, profile.UserId)
-		}
-
-	case err := <-errChan:
-		logger.Error("Failed getting profile deletion requests", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting profile deletion requests")
-	}
-
-	// get login info using userId
-	loginInfoChan, errChan := s.db.Login(tenant).FindByIds(userIds)
-
-	// populate phone number field in profile proto
-	var loginInfo []models.LoginModel
-	select {
-	case loginInfo = <-loginInfoChan:
-	case <-errChan:
-		logger.Error("Failed getting login info")
-	}
-
-	if len(loginInfo) > 0 {
-		populateLoginInfo(profileProtoList, loginInfo)
-	}
-
-	return &pb.ProfileListResponse{
-		Profiles:   profileProtoList,
-		TotalUsers: int64(totalCount),
-	}, nil
-}
-
-// DeleteProfile deletes profile and login from db and is used by admin only.
-func (s *ProfileService) DeleteProfile(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
-	}
-
-	// Check if profile exists
-	isExists := s.db.Profile(tenant).IsExistsById(req.UserId)
-
-	if !isExists {
-		return &pb.StatusResponse{
-			Status: "Profile not found",
-		}, nil
-	}
-
-	// Delete profile from db
-	err := <-s.db.Profile(tenant).DeleteById(req.UserId)
-	if err != nil {
-		logger.Error("Failed deleting profile", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed deleting profile")
-	}
-
-	// Delete login from db
-	err = <-s.db.Login(tenant).DeleteById(req.UserId)
-	if err != nil {
-		logger.Error("Failed deleting login", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed deleting login")
-	}
-
-	// TODO: Delete all posts, comments, notifications, etc. related to this user.
-
-	return &pb.StatusResponse{
-		Status: "Profile deleted successfully",
-	}, nil
-}
-
-// CancelProfileDeletionRequest cancels profile deletion request and is used by admin only.
-func (s *ProfileService) CancelProfileDeletionRequest(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
-	}
-
-	// Fetch profile info
-	profileResChan, errChan := s.db.Profile(tenant).FindOneById(req.UserId)
-
-	select {
-	case profileRes := <-profileResChan:
-		// Un mark profile for deletion
-		profileRes.DeletionInfo = models.DeletionInfo{
-			MarkedForDeletion: false,
-			DeletionTime:      0,
-			Reason:            "",
-		}
-		err := <-s.db.Profile(tenant).Save(profileRes)
-
-		if err != nil {
-			logger.Error("Failed saving profile deletion request", zap.Error(err))
-			return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
-		}
-	case err := <-errChan:
-		logger.Error("Failed getting profile", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting profile")
-	}
-
-	return &pb.StatusResponse{
-		Status: "Profile deletion request cancelled successfully",
-	}, nil
-}
-
-// check if user is admin or not and return response. Used by admin only.
-func (s *ProfileService) IsUserAdmin(ctx context.Context, req *pb.IdRequest) (*pb.IsUserAdminResponse, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	if len(req.UserId) > 0 {
-		userId = req.UserId
-	}
-
-	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
-	}
-
-	isAdmin := s.db.Login(tenant).IsAdmin(userId)
-
-	return &pb.IsUserAdminResponse{
-		IsAdmin: isAdmin,
-	}, nil
-}
-
+// GetProfileImageUploadUrl returns presigned url for uploading profile image.
 func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.ProfileImageUploadRequest) (*pb.ProfileImageUploadURL, error) {
 	uploadInstructions := `
 	| 1. Send profile image file to above uploadURL as a PUT request. 
@@ -444,6 +237,43 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 	}
 }
 
+// Admin only API
+// GetProfileByPhoneOrEmail returns profile using email or phone and is used by admin only.
+func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.GetProfileByPhoneOrEmailRequest) (*pb.UserProfileProto, error) {
+	userID, tenant := auth.GetUserIdAndTenant(ctx)
+
+	//validations
+	if req.Email == "" && req.Phone == "" {
+		return nil, status.Error(codes.InvalidArgument, "Email or Phone is required")
+	}
+
+	// Check if user is admin
+	if !s.db.Login(tenant).IsAdmin(userID) {
+		return nil, status.Error(codes.PermissionDenied, "User with id "+userID+" don't have permission")
+	}
+
+	// get login info using email or phone
+	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
+
+	if loginModel == nil {
+		return nil, status.Error(codes.NotFound, "User not found")
+	}
+
+	profileResChan, errChan := s.db.Profile(tenant).FindOneById(loginModel.UserId)
+	select {
+	case profile := <-profileResChan:
+		return getProfileProto(profile), nil
+	case err := <-errChan:
+		if err == mongo.ErrNoDocuments {
+			return nil, status.Error(codes.NotFound, "Profile not found")
+		}
+		logger.Error("Failed getting profile", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile")
+	}
+}
+
+// Admin only API
+// FetchProfiles returns list of profiles based on filters and pagination.
 func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfilesRequest) (*pb.ProfileListResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -481,35 +311,6 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfile
 
 	response := &pb.ProfileListResponse{Profiles: userProfileProto, TotalUsers: int64(totalCount)}
 	return response, nil
-}
-
-func (s *ProfileService) ChangeUserType(ctx context.Context, req *pb.ChangeUserTypeRequest) (*pb.StatusResponse, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
-	}
-
-	// fetch login info
-	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
-	if loginModel == nil {
-		return nil, status.Error(codes.NotFound, "User not found")
-	}
-
-	// change user type
-	loginModel.UserType = req.UserType.String()
-
-	// save login info
-	err := <-s.db.Login(tenant).Save(loginModel)
-	if err != nil {
-		logger.Error("Failed changing user type", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed changing user type")
-	}
-
-	return &pb.StatusResponse{
-		Status: "User type changed successfully",
-	}, nil
 }
 
 // get profile proto from profile model
@@ -602,16 +403,4 @@ func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *mo
 	}
 
 	return profile
-}
-
-func populateLoginInfo(userProfileProto []*pb.UserProfileProto, loginInfo []models.LoginModel) {
-	for i, profile := range userProfileProto {
-		for _, loginModel := range loginInfo {
-			if profile.UserId == loginModel.UserId {
-				userProfileProto[i].PhoneNumber = loginModel.Phone
-				copier.Copy(&userProfileProto[i], &loginModel)
-				break
-			}
-		}
-	}
 }

@@ -40,7 +40,6 @@ type ProfileModel struct {
 	CertificationDetails     CertificateModel     `bson:"certificationDetails" json:"certificationDetails"`
 	CreatedOn                int64                `bson:"createdOn,omitempty" json:"createdOn"`
 	LandSizeInAcres          string               `bson:"landSizeInAcres" json:"landSizeInAcres"`
-	DeletionInfo             DeletionInfo         `bson:"deletionInfo" json:"deletionInfo"`
 }
 
 func (m *ProfileModel) Id() string {
