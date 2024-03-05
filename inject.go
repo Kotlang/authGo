@@ -15,6 +15,7 @@ type Inject struct {
 	Otp      otp.OtpClientInterface
 
 	LoginService         *service.LoginService
+	LoginVerifiedService *service.LoginVerifiedService
 	ProfileService       *service.ProfileService
 	ProfileMasterService *service.ProfileMasterService
 	UnaryInterceptors    []grpc.UnaryServerInterceptor
@@ -31,6 +32,7 @@ func NewInject() *Inject {
 	inj.StreamInterceptors = append([]grpc.StreamServerInterceptor{}, interceptors.UserExistsAndUpdateLastActiveStreamInterceptor(inj.AuthDb))
 
 	inj.LoginService = service.NewLoginService(inj.AuthDb, inj.Otp)
+	inj.LoginVerifiedService = service.NewLoginVerifiedService(inj.AuthDb)
 	inj.ProfileService = service.NewProfileService(inj.AuthDb, inj.CloudFns)
 	inj.ProfileMasterService = service.NewProfileMasterService(inj.AuthDb)
 

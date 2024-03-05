@@ -20,6 +20,7 @@ func main() {
 		})
 	bootServer := server.NewGoApiBoot(corsConfig, inject.UnaryInterceptors, inject.StreamInterceptors)
 	pb.RegisterLoginServer(bootServer.GrpcServer, inject.LoginService)
+	pb.RegisterLoginVerifiedServer(bootServer.GrpcServer, inject.LoginVerifiedService)
 	pb.RegisterProfileServer(bootServer.GrpcServer, inject.ProfileService)
 	pb.RegisterProfileMasterServer(bootServer.GrpcServer, inject.ProfileMasterService)
 
