@@ -85,14 +85,14 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) 
 	}
 
 	loginResChan, errChan := s.db.Login(tenant).FindOneById(userId)
-
+	var login *models.LoginModel
 	select {
-	case login := <-loginResChan:
-		if login.DeletionInfo.MarkedForDeletion {
+	case login = <-loginResChan:
+		if login.DeletionInfo.MarkedForDeletion && login.UserType != "admin" {
 			return nil, status.Error(codes.PermissionDenied, "Profile Marked for Deletion")
 		}
 
-		if login.IsBlocked {
+		if login.IsBlocked && login.UserType != "admin" {
 			return nil, status.Error(codes.PermissionDenied, "User is blocked")
 		}
 	case err := <-errChan:
@@ -103,6 +103,12 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) 
 	select {
 	case profile := <-profileResChan:
 		profileProto := getProfileProto(profile)
+
+		if login.UserType == "admin" {
+			copier.CopyWithOption(profileProto, login, copier.Option{IgnoreEmpty: true})
+			profileProto.PhoneNumber = login.Phone
+		}
+
 		return profileProto, nil
 	case err := <-errChan:
 		if err == mongo.ErrNoDocuments {
