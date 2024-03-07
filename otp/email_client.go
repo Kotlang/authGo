@@ -30,7 +30,7 @@ func (c *EmailClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel)
 	userType := strings.TrimSpace(loginInfo.UserType)
 
 	if len(userType) == 0 {
-		loginInfo.UserType = "default"
+		loginInfo.UserType = "member"
 	}
 
 	<-c.Db.Login(tenant).Save(loginInfo)
@@ -43,7 +43,7 @@ func (c *EmailClient) GetLoginInfo(tenant, email string) *models.LoginModel {
 	if loginInfo == nil {
 		loginInfo = &models.LoginModel{
 			Email:    email,
-			UserType: "default",
+			UserType: "member",
 		}
 	}
 	return loginInfo
