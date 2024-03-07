@@ -43,7 +43,7 @@ func (c *PhoneClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel)
 	userType := strings.TrimSpace(loginInfo.UserType)
 
 	if len(userType) == 0 {
-		loginInfo.UserType = "default"
+		loginInfo.UserType = "member"
 	}
 
 	<-c.Db.Login(tenant).Save(loginInfo)
@@ -57,7 +57,7 @@ func (c *PhoneClient) GetLoginInfo(tenant, phone string) *models.LoginModel {
 	if loginInfo == nil {
 		loginInfo = &models.LoginModel{
 			Phone:    phone,
-			UserType: "default",
+			UserType: "member",
 		}
 	}
 	return loginInfo
