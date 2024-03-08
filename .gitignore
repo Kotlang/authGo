@@ -4,5 +4,5 @@ generated
 vendor
 .env
 azure_secrets
-.vscode
 key.json
+.vscode
