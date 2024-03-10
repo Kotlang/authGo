@@ -23,6 +23,7 @@ func main() {
 	pb.RegisterLoginVerifiedServer(bootServer.GrpcServer, inject.LoginVerifiedService)
 	pb.RegisterProfileServer(bootServer.GrpcServer, inject.ProfileService)
 	pb.RegisterProfileMasterServer(bootServer.GrpcServer, inject.ProfileMasterService)
+	pb.RegisterLeadServiceServer(bootServer.GrpcServer, inject.LeadService)
 
 	bootServer.Start(grpcPort, webPort)
 }
