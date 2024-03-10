@@ -10,6 +10,7 @@ type AuthDbInterface interface {
 	Profile(tenant string) ProfileRepositoryInterface
 	Tenant() TenantRepositoryInterface
 	ProfileMaster(tenant string) ProfileMasterRepositoryInterface
+	Lead(tenant string) LeadRepositoryInterface
 }
 
 type AuthDb struct{}
@@ -46,4 +47,13 @@ func (a *AuthDb) ProfileMaster(tenant string) ProfileMasterRepositoryInterface {
 	}
 
 	return &ProfileMasterRepository{baseRepo}
+}
+
+func (a *AuthDb) Lead(tenant string) LeadRepositoryInterface {
+	baseRepo := odm.UnimplementedBootRepository[models.LeadModel]{
+		Database:       tenant + "_auth",
+		CollectionName: "lead",
+	}
+
+	return &LeadRepository{baseRepo}
 }
