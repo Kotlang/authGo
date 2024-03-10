@@ -12,6 +12,7 @@ type Location struct {
 }
 
 type Addresses struct {
+	Type    string `bson:"type" json:"type"`
 	Address string `bson:"address" json:"address"`
 	City    string `bson:"city" json:"city"`
 	State   string `bson:"state" json:"state"`
@@ -25,21 +26,21 @@ type DeletionInfo struct {
 }
 
 type ProfileModel struct {
-	UserId                   string               `bson:"_id" json:"userId"`
-	Name                     string               `bson:"name,omitempty" json:"name"`
-	PhotoUrl                 string               `bson:"photoUrl" json:"photoUrl"`
-	Addresses                map[string]Addresses `bson:"addresses" json:"addresses"`
-	Location                 Location             `bson:"location" json:"location"`
-	FarmingType              string               `bson:"farmingType" json:"farmingType"`
-	Bio                      string               `bson:"bio" json:"bio"`
-	Crops                    []string             `bson:"crops" json:"crops"`
-	YearsSinceOrganicFarming int                  `bson:"yearsSinceOrganicFarming" json:"yearsSinceOrganicFarming"`
-	Gender                   string               `bson:"gender" json:"gender" copier:"-"`
-	IsVerified               bool                 `bson:"isVerified" json:"isVerified"`
-	PreferredLanguage        string               `bson:"preferredLanguage" json:"preferredLanguage"`
-	CertificationDetails     CertificateModel     `bson:"certificationDetails" json:"certificationDetails"`
-	CreatedOn                int64                `bson:"createdOn,omitempty" json:"createdOn"`
-	LandSizeInAcres          string               `bson:"landSizeInAcres" json:"landSizeInAcres"`
+	UserId                   string           `bson:"_id" json:"userId"`
+	Name                     string           `bson:"name,omitempty" json:"name"`
+	PhotoUrl                 string           `bson:"photoUrl" json:"photoUrl"`
+	Addresses                []Addresses      `bson:"addresses" json:"addresses"`
+	Location                 Location         `bson:"location" json:"location"`
+	FarmingType              string           `bson:"farmingType" json:"farmingType"`
+	Bio                      string           `bson:"bio" json:"bio"`
+	Crops                    []string         `bson:"crops" json:"crops"`
+	YearsSinceOrganicFarming int              `bson:"yearsSinceOrganicFarming" json:"yearsSinceOrganicFarming"`
+	Gender                   string           `bson:"gender" json:"gender" copier:"-"`
+	IsVerified               bool             `bson:"isVerified" json:"isVerified"`
+	PreferredLanguage        string           `bson:"preferredLanguage" json:"preferredLanguage"`
+	CertificationDetails     CertificateModel `bson:"certificationDetails" json:"certificationDetails"`
+	CreatedOn                int64            `bson:"createdOn,omitempty" json:"createdOn"`
+	LandSizeInAcres          string           `bson:"landSizeInAcres" json:"landSizeInAcres"`
 }
 
 func (m *ProfileModel) Id() string {
