@@ -18,6 +18,7 @@ type Inject struct {
 	LoginVerifiedService *service.LoginVerifiedService
 	ProfileService       *service.ProfileService
 	ProfileMasterService *service.ProfileMasterService
+	LeadService          *service.LeadService
 	UnaryInterceptors    []grpc.UnaryServerInterceptor
 	StreamInterceptors   []grpc.StreamServerInterceptor
 }
@@ -35,6 +36,7 @@ func NewInject() *Inject {
 	inj.LoginVerifiedService = service.NewLoginVerifiedService(inj.AuthDb)
 	inj.ProfileService = service.NewProfileService(inj.AuthDb, inj.CloudFns)
 	inj.ProfileMasterService = service.NewProfileMasterService(inj.AuthDb)
+	inj.LeadService = service.NewLeadService(inj.AuthDb)
 
 	return inj
 }
