@@ -163,7 +163,7 @@ func (s *LeadService) FetchLeads(ctx context.Context, req *pb.FetchLeadsRequest)
 	}
 
 	// get the leads from db
-	leads, totalCount := s.db.Lead(tenant).GetLeads(req.LeadFilters, int64(req.PageNumber), int64(req.PageSize))
+	leads, totalCount := s.db.Lead(tenant).GetLeads(req.LeadFilters, int64(req.PageSize), int64(req.PageNumber))
 
 	leadProtos := make([]*pb.LeadProto, len(leads))
 	for i, lead := range leads {
