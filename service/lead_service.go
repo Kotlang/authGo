@@ -162,6 +162,14 @@ func (s *LeadService) FetchLeads(ctx context.Context, req *pb.FetchLeadsRequest)
 		return nil, status.Error(codes.PermissionDenied, "User is not admin")
 	}
 
+	if req.PageNumber < 0 {
+		req.PageNumber = 0
+	}
+
+	if req.PageSize < 0 {
+		req.PageSize = 10
+	}
+
 	// get the leads from db
 	leads, totalCount := s.db.Lead(tenant).GetLeads(req.LeadFilters, int64(req.PageSize), int64(req.PageNumber))
 

@@ -35,7 +35,14 @@ func (l *LeadRepository) GetLeads(leadFilters *pb.LeadFilters, PageSize, PageNum
 
 	// get the leads and total count
 	skip := PageNumber * PageSize
-	resultChan, errChan := l.Find(filter, nil, PageSize, skip)
+
+	// sort by created at
+	sort := bson.D{
+		{Key: "createdAt", Value: -1},
+	}
+
+	// get the leads
+	resultChan, errChan := l.Find(filter, sort, PageSize, skip)
 	totalCountResChan, countErrChan := l.CountDocuments(filter)
 	totalCount = 0
 
@@ -126,6 +133,12 @@ func getLeadFilter(leadFilters *pb.LeadFilters) bson.M {
 			filter["addresses"] = bson.M{
 				"$elemMatch": addressFilters,
 			}
+		}
+	}
+
+	if leadFilters.PhoneNumbers != nil {
+		filter["phoneNumber"] = bson.M{
+			"$in": leadFilters.PhoneNumbers,
 		}
 	}
 
