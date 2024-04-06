@@ -9,7 +9,8 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	"github.com/Kotlang/authGo/extensions"
-	pb "github.com/Kotlang/authGo/generated"
+	authPb "github.com/Kotlang/authGo/generated/auth"
+	notificationPb "github.com/Kotlang/authGo/generated/notification"
 	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/bootUtils"
@@ -23,7 +24,7 @@ import (
 )
 
 type ProfileService struct {
-	pb.UnimplementedProfileServer
+	authPb.UnimplementedProfileServer
 	db       db.AuthDbInterface
 	cloudFns cloud.Cloud
 }
@@ -37,7 +38,7 @@ func NewProfileService(db db.AuthDbInterface, cloudFns cloud.Cloud) *ProfileServ
 
 // CreateOrUpdateProfile creates or updates profile for user.
 // All the fields are optional and only the fields except name. Fields provided in request will be updated.
-func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.CreateProfileRequest) (*pb.UserProfileProto, error) {
+func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *authPb.CreateProfileRequest) (*authPb.UserProfileProto, error) {
 	err := ValidateProfileRequest(req)
 	if err != nil {
 		return nil, err
@@ -62,13 +63,15 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 
 	// if user is new, register notification event for user created.
 	if isNewUser {
-		extensions.RegisterEvent(ctx, &pb.RegisterEventRequest{
-			EventType: "user.created",
+		extensions.RegisterEvent(ctx, &notificationPb.RegisterEventRequest{
+			EventType: "post.created",
+			Title:     "नया उपयोगकर्ता हमारे साथ जुड़े हैं।",
+			Body:      "",
 			TemplateParameters: map[string]string{
 				"userId": userId,
-				"body":   fmt.Sprintf("New user '%s' joined.", req.Name),
 			},
-			Topic: fmt.Sprintf("%s.user.created", tenant),
+			Topic:       fmt.Sprintf("%s.post.created", tenant),
+			TargetUsers: []string{userId},
 		})
 	}
 
@@ -77,7 +80,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *pb.Crea
 }
 
 // GetProfile returns profile for user. checks if user is blocked or marked for deletion.
-func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) (*pb.UserProfileProto, error) {
+func (s *ProfileService) GetProfileById(ctx context.Context, req *authPb.IdRequest) (*authPb.UserProfileProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	if len(req.UserId) > 0 {
@@ -121,7 +124,7 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *pb.IdRequest) 
 
 // BulkGetProfileByIds returns profiles for given user ids.
 // Login info is fetched first and then profile info is fetched using userIds which are not marked for deletion or blocked.
-func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGetProfileRequest) (*pb.ProfileListResponse, error) {
+func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *authPb.BulkGetProfileRequest) (*authPb.ProfileListResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// login info
@@ -147,12 +150,12 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGe
 	select {
 	case profileRes := <-profileResChan:
 		// convert profile model to proto
-		profileProtoList := make([]*pb.UserProfileProto, 0)
+		profileProtoList := make([]*authPb.UserProfileProto, 0)
 		for _, profile := range profileRes {
 			profileProtoList = append(profileProtoList, getProfileProto(&profile))
 		}
 
-		return &pb.ProfileListResponse{
+		return &authPb.ProfileListResponse{
 			Profiles: profileProtoList,
 		}, nil
 
@@ -163,7 +166,7 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *pb.BulkGe
 }
 
 // GetProfileImageUploadUrl returns presigned url for uploading profile image.
-func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.ProfileImageUploadRequest) (*pb.ProfileImageUploadURL, error) {
+func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *authPb.ProfileImageUploadRequest) (*authPb.ProfileImageUploadURL, error) {
 	uploadInstructions := `
 	| 1. Send profile image file to above uploadURL as a PUT request. 
 	| 
@@ -191,7 +194,7 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.P
 	}
 
 	preSignedUrl, downloadUrl := s.cloudFns.GetPresignedUrl(profileBucket, key, contentType, 10*time.Minute)
-	return &pb.ProfileImageUploadURL{
+	return &authPb.ProfileImageUploadURL{
 		UploadUrl:    preSignedUrl,
 		MediaUrl:     downloadUrl,
 		Instructions: uploadInstructions,
@@ -199,7 +202,7 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *pb.P
 }
 
 // UploadProfileImage uploads profile image to cloud bucket with max size of 5mb.
-func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImageServer) error {
+func (s *ProfileService) UploadProfileImage(stream authPb.Profile_UploadProfileImageServer) error {
 	userId, tenant := auth.GetUserIdAndTenant(stream.Context())
 	logger.Info("Uploading image", zap.String("userId", userId), zap.String("tenant", tenant))
 	acceptableMimeTypes := []string{"image/jpeg", "image/png"}
@@ -235,7 +238,7 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 
 	select {
 	case result := <-resultChan:
-		stream.SendAndClose(&pb.UploadImageResponse{UploadPath: result})
+		stream.SendAndClose(&authPb.UploadImageResponse{UploadPath: result})
 		return nil
 	case err := <-errorChan:
 		logger.Error("Failed uploading image", zap.Error(err))
@@ -245,7 +248,7 @@ func (s *ProfileService) UploadProfileImage(stream pb.Profile_UploadProfileImage
 
 // Admin only API
 // GetProfileByPhoneOrEmail returns profile using email or phone and is used by admin only.
-func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.GetProfileByPhoneOrEmailRequest) (*pb.UserProfileProto, error) {
+func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *authPb.GetProfileByPhoneOrEmailRequest) (*authPb.UserProfileProto, error) {
 	userID, tenant := auth.GetUserIdAndTenant(ctx)
 
 	//validations
@@ -280,7 +283,7 @@ func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *pb.G
 
 // Admin only API
 // FetchProfiles returns list of profiles based on filters and pagination.
-func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfilesRequest) (*pb.ProfileListResponse, error) {
+func (s *ProfileService) FetchProfiles(ctx context.Context, req *authPb.FetchProfilesRequest) (*authPb.ProfileListResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
@@ -298,7 +301,7 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfile
 	// get login info using userId
 	loginInfoChan, errChan := s.db.Login(tenant).FindByIds(userIds)
 
-	userProfileProto := []*pb.UserProfileProto{}
+	userProfileProto := []*authPb.UserProfileProto{}
 	for _, userModel := range profiles {
 		userProfileProto = append(userProfileProto, getProfileProto(&userModel))
 	}
@@ -315,13 +318,13 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *pb.FetchProfile
 		populateLoginInfo(userProfileProto, loginInfo)
 	}
 
-	response := &pb.ProfileListResponse{Profiles: userProfileProto, TotalUsers: int64(totalCount)}
+	response := &authPb.ProfileListResponse{Profiles: userProfileProto, TotalUsers: int64(totalCount)}
 	return response, nil
 }
 
 // get profile proto from profile model
-func getProfileProto(profileModel *models.ProfileModel) *pb.UserProfileProto {
-	result := &pb.UserProfileProto{}
+func getProfileProto(profileModel *models.ProfileModel) *authPb.UserProfileProto {
+	result := &authPb.UserProfileProto{}
 
 	if profileModel == nil {
 		return result
@@ -333,31 +336,31 @@ func getProfileProto(profileModel *models.ProfileModel) *pb.UserProfileProto {
 	})
 
 	// copy gender value
-	value, ok := pb.Gender_value[profileModel.Gender]
+	value, ok := authPb.Gender_value[profileModel.Gender]
 	if !ok {
-		value = int32(pb.Gender_Unspecified)
+		value = int32(authPb.Gender_Unspecified)
 	}
-	result.Gender = pb.Gender(value)
+	result.Gender = authPb.Gender(value)
 
 	// copy farming type
-	value, ok = pb.FarmingType_value[profileModel.FarmingType]
+	value, ok = authPb.FarmingType_value[profileModel.FarmingType]
 	if !ok {
-		value = int32(pb.FarmingType_UnspecifiedFarming)
+		value = int32(authPb.FarmingType_UnspecifiedFarming)
 	}
-	result.FarmingType = pb.FarmingType(value)
+	result.FarmingType = authPb.FarmingType(value)
 
 	// copy land size
-	value, ok = pb.LandSizeInAcres_value[profileModel.LandSizeInAcres]
+	value, ok = authPb.LandSizeInAcres_value[profileModel.LandSizeInAcres]
 	if !ok {
-		value = int32(pb.LandSizeInAcres_UnspecifiedLandSize)
+		value = int32(authPb.LandSizeInAcres_UnspecifiedLandSize)
 	}
-	result.LandSizeInAcres = pb.LandSizeInAcres(value)
+	result.LandSizeInAcres = authPb.LandSizeInAcres(value)
 
 	return result
 }
 
 // get profile model from profile proto
-func getProfileModel(profileProto *pb.CreateProfileRequest, profileModel *models.ProfileModel) *models.ProfileModel {
+func getProfileModel(profileProto *authPb.CreateProfileRequest, profileModel *models.ProfileModel) *models.ProfileModel {
 
 	if profileModel == nil {
 		profileModel = &models.ProfileModel{}
@@ -366,28 +369,28 @@ func getProfileModel(profileProto *pb.CreateProfileRequest, profileModel *models
 	copier.CopyWithOption(profileModel, profileProto, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 
 	//copy gender if not unspecified
-	if profileProto.Gender != pb.Gender_Unspecified {
-		value, ok := pb.Gender_name[int32(profileProto.Gender)]
+	if profileProto.Gender != authPb.Gender_Unspecified {
+		value, ok := authPb.Gender_name[int32(profileProto.Gender)]
 		if !ok {
-			value = pb.Gender_name[int32(pb.Gender_Unspecified)]
+			value = authPb.Gender_name[int32(authPb.Gender_Unspecified)]
 		}
 		profileModel.Gender = value
 	}
 
 	//copy farming type if not unspecified
-	if profileProto.FarmingType != pb.FarmingType_UnspecifiedFarming {
-		value, ok := pb.FarmingType_name[int32(profileProto.FarmingType)]
+	if profileProto.FarmingType != authPb.FarmingType_UnspecifiedFarming {
+		value, ok := authPb.FarmingType_name[int32(profileProto.FarmingType)]
 		if !ok {
-			value = pb.FarmingType_name[int32(pb.FarmingType_UnspecifiedFarming)]
+			value = authPb.FarmingType_name[int32(authPb.FarmingType_UnspecifiedFarming)]
 		}
 		profileModel.FarmingType = value
 	}
 
 	//copy land size if not unspecified
-	if profileProto.LandSizeInAcres != pb.LandSizeInAcres_UnspecifiedLandSize {
-		value, ok := pb.LandSizeInAcres_name[int32(profileProto.LandSizeInAcres)]
+	if profileProto.LandSizeInAcres != authPb.LandSizeInAcres_UnspecifiedLandSize {
+		value, ok := authPb.LandSizeInAcres_name[int32(profileProto.LandSizeInAcres)]
 		if !ok {
-			value = pb.LandSizeInAcres_name[int32(pb.LandSizeInAcres_UnspecifiedLandSize)]
+			value = authPb.LandSizeInAcres_name[int32(authPb.LandSizeInAcres_UnspecifiedLandSize)]
 		}
 		profileModel.LandSizeInAcres = value
 	}

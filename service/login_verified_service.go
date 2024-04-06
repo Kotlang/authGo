@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/Kotlang/authGo/db"
-	pb "github.com/Kotlang/authGo/generated"
+	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
@@ -17,7 +17,7 @@ import (
 )
 
 type LoginVerifiedService struct {
-	pb.UnimplementedLoginVerifiedServer
+	authPb.UnimplementedLoginVerifiedServer
 	db db.AuthDbInterface
 }
 
@@ -30,7 +30,7 @@ func NewLoginVerifiedService(
 }
 
 // RequestProfileDeletion marks profile for deletion and is used by the client
-func (s *LoginVerifiedService) RequestProfileDeletion(ctx context.Context, req *pb.ProfileDeletionRequest) (*pb.StatusResponse, error) {
+func (s *LoginVerifiedService) RequestProfileDeletion(ctx context.Context, req *authPb.ProfileDeletionRequest) (*authPb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Fetch profile info
@@ -54,14 +54,14 @@ func (s *LoginVerifiedService) RequestProfileDeletion(ctx context.Context, req *
 		return nil, status.Error(codes.Internal, "Failed getting profile")
 	}
 
-	return &pb.StatusResponse{
+	return &authPb.StatusResponse{
 		Status: "Profile deletion request sent successfully",
 	}, nil
 }
 
 // Admin only API
 // CancelProfileDeletionRequest cancels profile deletion request and is used by admin only.
-func (s *LoginVerifiedService) CancelProfileDeletionRequest(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+func (s *LoginVerifiedService) CancelProfileDeletionRequest(ctx context.Context, req *authPb.IdRequest) (*authPb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
@@ -90,14 +90,14 @@ func (s *LoginVerifiedService) CancelProfileDeletionRequest(ctx context.Context,
 		return nil, status.Error(codes.Internal, "Failed getting profile")
 	}
 
-	return &pb.StatusResponse{
+	return &authPb.StatusResponse{
 		Status: "Profile deletion request cancelled successfully",
 	}, nil
 }
 
 // Admin only API
 // GetPendingProfileDeletionRequests returns all profiles marked for deletion and is used by admin only.
-func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Context, req *pb.GetProfileDeletionRequest) (*pb.ProfileListResponse, error) {
+func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Context, req *authPb.GetProfileDeletionRequest) (*authPb.ProfileListResponse, error) {
 	userID, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
@@ -143,13 +143,13 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 	profileResChan, errChan := s.db.Profile(tenant).FindByIds(userIds)
 	select {
 	case profiles := <-profileResChan:
-		profileProto := []*pb.UserProfileProto{}
+		profileProto := []*authPb.UserProfileProto{}
 		for _, profile := range profiles {
 			profileProto = append(profileProto, getProfileProto(&profile))
 		}
 		populateLoginInfo(profileProto, login)
 
-		return &pb.ProfileListResponse{
+		return &authPb.ProfileListResponse{
 			Profiles:   profileProto,
 			TotalUsers: int64(totalCount),
 		}, nil
@@ -161,7 +161,7 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 
 // Admin only API
 // DeleteProfile deletes profile and login from db and is used by admin only.
-func (s *LoginVerifiedService) DeleteProfile(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+func (s *LoginVerifiedService) DeleteProfile(ctx context.Context, req *authPb.IdRequest) (*authPb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
@@ -173,7 +173,7 @@ func (s *LoginVerifiedService) DeleteProfile(ctx context.Context, req *pb.IdRequ
 	isExists := s.db.Profile(tenant).IsExistsById(req.UserId)
 
 	if !isExists {
-		return &pb.StatusResponse{
+		return &authPb.StatusResponse{
 			Status: "Profile not found",
 		}, nil
 	}
@@ -194,14 +194,14 @@ func (s *LoginVerifiedService) DeleteProfile(ctx context.Context, req *pb.IdRequ
 
 	// TODO: Delete all posts, comments, notifications, etc. related to this user.
 
-	return &pb.StatusResponse{
+	return &authPb.StatusResponse{
 		Status: "Profile deleted successfully",
 	}, nil
 }
 
 // Admin only API
 // check if user is admin or not and return response.
-func (s *LoginVerifiedService) IsUserAdmin(ctx context.Context, req *pb.IdRequest) (*pb.IsUserAdminResponse, error) {
+func (s *LoginVerifiedService) IsUserAdmin(ctx context.Context, req *authPb.IdRequest) (*authPb.IsUserAdminResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	if len(req.UserId) > 0 {
@@ -215,13 +215,13 @@ func (s *LoginVerifiedService) IsUserAdmin(ctx context.Context, req *pb.IdReques
 
 	isAdmin := s.db.Login(tenant).IsAdmin(userId)
 
-	return &pb.IsUserAdminResponse{
+	return &authPb.IsUserAdminResponse{
 		IsAdmin: isAdmin,
 	}, nil
 }
 
 // Admin only API
-func (s *LoginVerifiedService) ChangeUserType(ctx context.Context, req *pb.ChangeUserTypeRequest) (*pb.StatusResponse, error) {
+func (s *LoginVerifiedService) ChangeUserType(ctx context.Context, req *authPb.ChangeUserTypeRequest) (*authPb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
@@ -245,14 +245,14 @@ func (s *LoginVerifiedService) ChangeUserType(ctx context.Context, req *pb.Chang
 		return nil, status.Error(codes.Internal, "Failed changing user type")
 	}
 
-	return &pb.StatusResponse{
+	return &authPb.StatusResponse{
 		Status: "User type changed successfully",
 	}, nil
 }
 
 // Admin only API
 // BlockUser blocks user.
-func (s *LoginVerifiedService) BlockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+func (s *LoginVerifiedService) BlockUser(ctx context.Context, req *authPb.IdRequest) (*authPb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
@@ -275,14 +275,14 @@ func (s *LoginVerifiedService) BlockUser(ctx context.Context, req *pb.IdRequest)
 		logger.Error("Failed getting login", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting login")
 	}
-	return &pb.StatusResponse{
+	return &authPb.StatusResponse{
 		Status: "User blocked successfully",
 	}, nil
 }
 
 // Admin only API
 // UnblockUser unblocks user.
-func (s *LoginVerifiedService) UnblockUser(ctx context.Context, req *pb.IdRequest) (*pb.StatusResponse, error) {
+func (s *LoginVerifiedService) UnblockUser(ctx context.Context, req *authPb.IdRequest) (*authPb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
@@ -305,12 +305,12 @@ func (s *LoginVerifiedService) UnblockUser(ctx context.Context, req *pb.IdReques
 		logger.Error("Failed getting login", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting login")
 	}
-	return &pb.StatusResponse{
+	return &authPb.StatusResponse{
 		Status: "User unblocked successfully",
 	}, nil
 }
 
-func populateLoginInfo(userProfileProto []*pb.UserProfileProto, loginInfo []models.LoginModel) {
+func populateLoginInfo(userProfileProto []*authPb.UserProfileProto, loginInfo []models.LoginModel) {
 	for i, profile := range userProfileProto {
 		for _, loginModel := range loginInfo {
 			if profile.UserId == loginModel.UserId {
