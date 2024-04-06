@@ -1,7 +1,7 @@
 package main
 
 import (
-	pb "github.com/Kotlang/authGo/generated"
+	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/SaiNageswarS/go-api-boot/server"
 	"github.com/rs/cors"
 )
@@ -19,11 +19,11 @@ func main() {
 			AllowedHeaders: []string{"*"},
 		})
 	bootServer := server.NewGoApiBoot(corsConfig, inject.UnaryInterceptors, inject.StreamInterceptors)
-	pb.RegisterLoginServer(bootServer.GrpcServer, inject.LoginService)
-	pb.RegisterLoginVerifiedServer(bootServer.GrpcServer, inject.LoginVerifiedService)
-	pb.RegisterProfileServer(bootServer.GrpcServer, inject.ProfileService)
-	pb.RegisterProfileMasterServer(bootServer.GrpcServer, inject.ProfileMasterService)
-	pb.RegisterLeadServiceServer(bootServer.GrpcServer, inject.LeadService)
+	authPb.RegisterLoginServer(bootServer.GrpcServer, inject.LoginService)
+	authPb.RegisterLoginVerifiedServer(bootServer.GrpcServer, inject.LoginVerifiedService)
+	authPb.RegisterProfileServer(bootServer.GrpcServer, inject.ProfileService)
+	authPb.RegisterProfileMasterServer(bootServer.GrpcServer, inject.ProfileMasterService)
+	authPb.RegisterLeadServiceServer(bootServer.GrpcServer, inject.LeadService)
 
 	bootServer.Start(grpcPort, webPort)
 }

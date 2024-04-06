@@ -6,7 +6,7 @@ import (
 	"unicode"
 
 	"github.com/Kotlang/authGo/db"
-	pb "github.com/Kotlang/authGo/generated"
+	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/Kotlang/authGo/models"
 	"github.com/Kotlang/authGo/otp"
 	"github.com/SaiNageswarS/go-api-boot/auth"
@@ -18,7 +18,7 @@ import (
 )
 
 type LoginService struct {
-	pb.UnimplementedLoginServer
+	authPb.UnimplementedLoginServer
 	db  db.AuthDbInterface
 	otp otp.OtpClientInterface
 }
@@ -43,7 +43,7 @@ func (u *LoginService) CheckUserExistenceOverride(ctx context.Context) (context.
 	return ctx, nil
 }
 
-func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.StatusResponse, error) {
+func (s *LoginService) Login(ctx context.Context, req *authPb.LoginRequest) (*authPb.StatusResponse, error) {
 	if len(req.Domain) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
@@ -84,7 +84,7 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 	// if phone number is excluded from verification, donot send otp and return success
 	phoneNumberToExcludeVerification := os.Getenv("PHONE_NUMBER_TO_EXCLUDE_VERIFICATION")
 	if req.EmailOrPhone == phoneNumberToExcludeVerification {
-		return &pb.StatusResponse{Status: "success"}, nil
+		return &authPb.StatusResponse{Status: "success"}, nil
 	}
 
 	// send otp
@@ -92,10 +92,10 @@ func (s *LoginService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Sta
 	if err != nil {
 		return nil, err
 	}
-	return &pb.StatusResponse{Status: "success"}, nil
+	return &authPb.StatusResponse{Status: "success"}, nil
 }
 
-func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.AuthResponse, error) {
+func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*authPb.AuthResponse, error) {
 	if len(req.Domain) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
@@ -140,7 +140,7 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 	}
 
 	// fetch profile for user.
-	profileProto := &pb.UserProfileProto{}
+	profileProto := &authPb.UserProfileProto{}
 	resultChan, errorChan := s.db.Profile(tenantDetails.Name).FindOneById(loginInfo.Id())
 	select {
 	case profile := <-resultChan:
@@ -153,7 +153,7 @@ func (s *LoginService) Verify(ctx context.Context, req *pb.VerifyRequest) (*pb.A
 	copier.CopyWithOption(profileProto, loginInfo, copier.Option{IgnoreEmpty: true})
 
 	jwtToken := auth.GetToken(tenantDetails.Name, loginInfo.Id(), loginInfo.UserType)
-	return &pb.AuthResponse{
+	return &authPb.AuthResponse{
 		Jwt:      jwtToken,
 		UserType: loginInfo.UserType,
 		Profile:  profileProto,

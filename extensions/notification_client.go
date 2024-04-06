@@ -6,7 +6,7 @@ import (
 	"os"
 	"sync"
 
-	pb "github.com/Kotlang/authGo/generated"
+	notificationPb "github.com/Kotlang/authGo/generated/notification"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"go.uber.org/zap"
@@ -42,7 +42,7 @@ func (c *NotificationClient) getNotificationConnection() *grpc.ClientConn {
 	return c.cached_conn
 }
 
-func RegisterEvent(grpcContext context.Context, event *pb.RegisterEventRequest) chan error {
+func RegisterEvent(grpcContext context.Context, event *notificationPb.RegisterEventRequest) chan error {
 	errChan := make(chan error)
 
 	go func() {
@@ -53,7 +53,7 @@ func RegisterEvent(grpcContext context.Context, event *pb.RegisterEventRequest) 
 			return
 		}
 
-		client := pb.NewNotificationServiceClient(conn)
+		client := notificationPb.NewNotificationServiceClient(conn)
 
 		ctx := prepareCallContext(grpcContext)
 		if ctx == nil {

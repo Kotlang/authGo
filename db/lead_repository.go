@@ -1,7 +1,7 @@
 package db
 
 import (
-	pb "github.com/Kotlang/authGo/generated"
+	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
@@ -12,7 +12,7 @@ import (
 type LeadRepositoryInterface interface {
 	odm.BootRepository[models.LeadModel]
 	FindByIds(ids []string) (chan []models.LeadModel, chan error)
-	GetLeads(leadFilters *pb.LeadFilters, PageSize, PageNumber int64) (leads []models.LeadModel, totalCount int)
+	GetLeads(leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []models.LeadModel, totalCount int)
 }
 
 type LeadRepository struct {
@@ -28,7 +28,7 @@ func (l *LeadRepository) FindByIds(ids []string) (chan []models.LeadModel, chan 
 	return l.Find(filter, nil, 0, 0)
 }
 
-func (l *LeadRepository) GetLeads(leadFilters *pb.LeadFilters, PageSize, PageNumber int64) (leads []models.LeadModel, totalCount int) {
+func (l *LeadRepository) GetLeads(leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []models.LeadModel, totalCount int) {
 
 	// get the filter
 	filter := getLeadFilter(leadFilters)
@@ -63,7 +63,7 @@ func (l *LeadRepository) GetLeads(leadFilters *pb.LeadFilters, PageSize, PageNum
 	return leads, totalCount
 }
 
-func getLeadFilter(leadFilters *pb.LeadFilters) bson.M {
+func getLeadFilter(leadFilters *authPb.LeadFilters) bson.M {
 
 	if leadFilters == nil {
 		return bson.M{}
@@ -72,12 +72,12 @@ func getLeadFilter(leadFilters *pb.LeadFilters) bson.M {
 	filter := bson.M{}
 
 	// if operator type is not unspecified then add it to filter
-	if leadFilters.OperatorType != pb.OperatorType_UNSPECIFIED_OPERATOR {
+	if leadFilters.OperatorType != authPb.OperatorType_UNSPECIFIED_OPERATOR {
 		filter["operatorType"] = leadFilters.OperatorType.String()
 	}
 
 	// if channel is not unspecified then add it to filter
-	if leadFilters.Channel != pb.LeadChannel_UNSPECIFIED_CHANNEL {
+	if leadFilters.Channel != authPb.LeadChannel_UNSPECIFIED_CHANNEL {
 		filter["channel"] = leadFilters.Channel.String()
 	}
 
@@ -85,11 +85,11 @@ func getLeadFilter(leadFilters *pb.LeadFilters) bson.M {
 		filter["source"] = leadFilters.Source
 	}
 
-	if leadFilters.LandSizeInAcres != pb.LandSizeInAcres_UnspecifiedLandSize {
+	if leadFilters.LandSizeInAcres != authPb.LandSizeInAcres_UnspecifiedLandSize {
 		filter["landSizeInAcres"] = leadFilters.LandSizeInAcres.String()
 	}
 
-	if leadFilters.FarmingType != pb.FarmingType_UnspecifiedFarming {
+	if leadFilters.FarmingType != authPb.FarmingType_UnspecifiedFarming {
 		filter["farmingType"] = leadFilters.FarmingType.String()
 	}
 
@@ -122,7 +122,7 @@ func getLeadFilter(leadFilters *pb.LeadFilters) bson.M {
 		filter["education"] = leadFilters.Education
 	}
 
-	if leadFilters.Status != pb.Status_UNSPECIFIED_STATUS {
+	if leadFilters.Status != authPb.Status_UNSPECIFIED_STATUS {
 		filter["status"] = leadFilters.Status.String()
 	}
 
@@ -145,7 +145,7 @@ func getLeadFilter(leadFilters *pb.LeadFilters) bson.M {
 	return filter
 }
 
-func getAddressFilter(addressfilter *pb.AddressFilters) bson.M {
+func getAddressFilter(addressfilter *authPb.AddressFilters) bson.M {
 	filter := bson.M{}
 	if addressfilter.City != "" {
 		filter["city"] = addressfilter.City

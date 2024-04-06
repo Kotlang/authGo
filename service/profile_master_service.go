@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/Kotlang/authGo/db"
-	pb "github.com/Kotlang/authGo/generated"
+	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
@@ -19,7 +19,7 @@ import (
 )
 
 type ProfileMasterService struct {
-	pb.UnimplementedProfileMasterServer
+	authPb.UnimplementedProfileMasterServer
 	db db.AuthDbInterface
 }
 
@@ -29,7 +29,7 @@ func NewProfileMasterService(authDB db.AuthDbInterface) *ProfileMasterService {
 	}
 }
 
-func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.GetProfileMasterRequest) (*pb.ProfileMasterResponse, error) {
+func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *authPb.GetProfileMasterRequest) (*authPb.ProfileMasterResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
 	language := req.Language
@@ -38,12 +38,12 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.Get
 	}
 
 	profileMasterListChan, profileMasterListErrorChan := s.db.ProfileMaster(tenant).FindByLanguage(language)
-	list := make([]*pb.ProfileMasterProto, 0)
+	list := make([]*authPb.ProfileMasterProto, 0)
 
 	select {
 	case profileMasterList := <-profileMasterListChan:
 		copier.CopyWithOption(&list, &profileMasterList, copier.Option{DeepCopy: true})
-		return &pb.ProfileMasterResponse{
+		return &authPb.ProfileMasterResponse{
 			ProfileMasterList: list,
 		}, nil
 	case err := <-profileMasterListErrorChan:
@@ -52,7 +52,7 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *pb.Get
 	}
 }
 
-func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *pb.GetLanguagesRequest) (*pb.LanguagesResponse, error) {
+func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *authPb.GetLanguagesRequest) (*authPb.LanguagesResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
 	distinctLanguagesChan, distinctLanguagesErrorChan := s.db.ProfileMaster(tenant).Distinct("language", bson.D{}, 2*time.Second)
@@ -66,7 +66,7 @@ func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *pb.GetLang
 				list = append(list, res)
 			}
 		}
-		return &pb.LanguagesResponse{
+		return &authPb.LanguagesResponse{
 			Languages: list,
 		}, nil
 	case err := <-distinctLanguagesErrorChan:
@@ -76,7 +76,7 @@ func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *pb.GetLang
 }
 
 // ADMIN PORTAL API
-func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *pb.BulkGetProfileMasterRequest) (*pb.ProfileMasterResponse, error) {
+func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *authPb.BulkGetProfileMasterRequest) (*authPb.ProfileMasterResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
@@ -92,12 +92,12 @@ func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *pb
 	}
 
 	profileMasterListChan, profileMasterListErrorChan := s.db.ProfileMaster(tenant).Find(bson.M{}, nil, 0, 0)
-	list := make([]*pb.ProfileMasterProto, 0)
+	list := make([]*authPb.ProfileMasterProto, 0)
 
 	select {
 	case profileMasterList := <-profileMasterListChan:
 		copier.CopyWithOption(&list, &profileMasterList, copier.Option{DeepCopy: true})
-		return &pb.ProfileMasterResponse{
+		return &authPb.ProfileMasterResponse{
 			ProfileMasterList: list,
 		}, nil
 	case err := <-profileMasterListErrorChan:
@@ -108,7 +108,7 @@ func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *pb
 
 // ADMIN PORTAL API
 // Delete Profile Master
-func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *pb.DeleteProfileMasterRequest) (*pb.DeleteProfileMasterResponse, error) {
+func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *authPb.DeleteProfileMasterRequest) (*authPb.DeleteProfileMasterResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
@@ -132,7 +132,7 @@ func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *pb.
 			logger.Error("Internal error when deleting Profile Master with id: "+req.Id, zap.Error(err))
 			return nil, status.Error(codes.Internal, err.Error())
 		} else {
-			return &pb.DeleteProfileMasterResponse{
+			return &authPb.DeleteProfileMasterResponse{
 				Status: "success",
 			}, nil
 		}
@@ -144,7 +144,7 @@ func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *pb.
 
 // ADMIN PORTAL API
 // Add Profile Master
-func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *pb.AddProfileMasterRequest) (*pb.ProfileMasterProto, error) {
+func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *authPb.AddProfileMasterRequest) (*authPb.ProfileMasterProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
@@ -174,7 +174,7 @@ func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *pb.Add
 		profileMasterChan, errChan := s.db.ProfileMaster(tenant).FindOneById(profileMaster.Id())
 		select {
 		case profileMaster := <-profileMasterChan:
-			profileMasterProto := &pb.ProfileMasterProto{}
+			profileMasterProto := &authPb.ProfileMasterProto{}
 			copier.Copy(profileMasterProto, profileMaster)
 			return profileMasterProto, nil
 		case err := <-errChan:
@@ -186,7 +186,7 @@ func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *pb.Add
 
 // ADMIN PORTAL API
 // Update Profile Master
-func (s *ProfileMasterService) UpdateProfileMaster(ctx context.Context, req *pb.ProfileMasterProto) (*pb.ProfileMasterProto, error) {
+func (s *ProfileMasterService) UpdateProfileMaster(ctx context.Context, req *authPb.ProfileMasterProto) (*authPb.ProfileMasterProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
@@ -211,7 +211,7 @@ func (s *ProfileMasterService) UpdateProfileMaster(ctx context.Context, req *pb.
 			logger.Error("Internal error when saving Profile Master with id: "+profileMaster.Id(), zap.Error(err))
 			return nil, status.Error(codes.Internal, err.Error())
 		} else {
-			profileMasterProto := &pb.ProfileMasterProto{}
+			profileMasterProto := &authPb.ProfileMasterProto{}
 			copier.Copy(profileMasterProto, profileMaster)
 			return profileMasterProto, nil
 		}

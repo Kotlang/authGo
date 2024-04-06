@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/Kotlang/authGo/db"
-	pb "github.com/Kotlang/authGo/generated"
+	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
@@ -15,12 +15,12 @@ import (
 )
 
 type LeadServiceInterface interface {
-	pb.LeadServiceServer
+	authPb.LeadServiceServer
 	db.AuthDbInterface
 }
 
 type LeadService struct {
-	pb.UnimplementedLeadServiceServer
+	authPb.UnimplementedLeadServiceServer
 	db db.AuthDbInterface
 }
 
@@ -29,7 +29,7 @@ func NewLeadService(db db.AuthDbInterface) *LeadService {
 }
 
 // Admin only API
-func (s *LeadService) CreateLead(ctx context.Context, req *pb.CreateOrUpdateLeadRequest) (*pb.LeadProto, error) {
+func (s *LeadService) CreateLead(ctx context.Context, req *authPb.CreateOrUpdateLeadRequest) (*authPb.LeadProto, error) {
 
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
@@ -56,7 +56,7 @@ func (s *LeadService) CreateLead(ctx context.Context, req *pb.CreateOrUpdateLead
 }
 
 // Admin only API
-func (s *LeadService) GetLeadById(ctx context.Context, req *pb.LeadIdRequest) (*pb.LeadProto, error) {
+func (s *LeadService) GetLeadById(ctx context.Context, req *authPb.LeadIdRequest) (*authPb.LeadProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
@@ -78,7 +78,7 @@ func (s *LeadService) GetLeadById(ctx context.Context, req *pb.LeadIdRequest) (*
 }
 
 // Admin only API
-func (s *LeadService) BulkGetLeadsById(ctx context.Context, req *pb.BulkIdRequest) (*pb.LeadListResponse, error) {
+func (s *LeadService) BulkGetLeadsById(ctx context.Context, req *authPb.BulkIdRequest) (*authPb.LeadListResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
@@ -91,11 +91,11 @@ func (s *LeadService) BulkGetLeadsById(ctx context.Context, req *pb.BulkIdReques
 	leadResChan, errChan := s.db.Lead(tenant).FindByIds(req.LeadIds)
 	select {
 	case leads := <-leadResChan:
-		leadProtos := make([]*pb.LeadProto, len(leads))
+		leadProtos := make([]*authPb.LeadProto, len(leads))
 		for i, lead := range leads {
 			leadProtos[i] = getLeadProto(&lead)
 		}
-		return &pb.LeadListResponse{Leads: leadProtos}, nil
+		return &authPb.LeadListResponse{Leads: leadProtos}, nil
 	case err := <-errChan:
 		logger.Error("Error getting leads", zap.Error(err))
 		return nil, err
@@ -104,7 +104,7 @@ func (s *LeadService) BulkGetLeadsById(ctx context.Context, req *pb.BulkIdReques
 }
 
 // Admin only API
-func (s *LeadService) UpdateLead(ctx context.Context, req *pb.CreateOrUpdateLeadRequest) (*pb.LeadProto, error) {
+func (s *LeadService) UpdateLead(ctx context.Context, req *authPb.CreateOrUpdateLeadRequest) (*authPb.LeadProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
@@ -131,7 +131,7 @@ func (s *LeadService) UpdateLead(ctx context.Context, req *pb.CreateOrUpdateLead
 }
 
 // Admin only API
-func (s *LeadService) DeleteLead(ctx context.Context, req *pb.LeadIdRequest) (*pb.StatusResponse, error) {
+func (s *LeadService) DeleteLead(ctx context.Context, req *authPb.LeadIdRequest) (*authPb.StatusResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
@@ -147,13 +147,13 @@ func (s *LeadService) DeleteLead(ctx context.Context, req *pb.LeadIdRequest) (*p
 		return nil, err
 	}
 
-	return &pb.StatusResponse{
+	return &authPb.StatusResponse{
 		Status: "Success",
 	}, nil
 }
 
 // Admin only API
-func (s *LeadService) FetchLeads(ctx context.Context, req *pb.FetchLeadsRequest) (*pb.LeadListResponse, error) {
+func (s *LeadService) FetchLeads(ctx context.Context, req *authPb.FetchLeadsRequest) (*authPb.LeadListResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
@@ -173,56 +173,56 @@ func (s *LeadService) FetchLeads(ctx context.Context, req *pb.FetchLeadsRequest)
 	// get the leads from db
 	leads, totalCount := s.db.Lead(tenant).GetLeads(req.LeadFilters, int64(req.PageSize), int64(req.PageNumber))
 
-	leadProtos := make([]*pb.LeadProto, len(leads))
+	leadProtos := make([]*authPb.LeadProto, len(leads))
 	for i, lead := range leads {
 		leadProtos[i] = getLeadProto(&lead)
 	}
 
-	return &pb.LeadListResponse{
+	return &authPb.LeadListResponse{
 		Leads:      leadProtos,
 		TotalLeads: int64(totalCount),
 	}, nil
 
 }
 
-func getLeadModel(req *pb.CreateOrUpdateLeadRequest) *models.LeadModel {
+func getLeadModel(req *authPb.CreateOrUpdateLeadRequest) *models.LeadModel {
 
 	// copying the request to lead model
 	lead := &models.LeadModel{}
 	copier.CopyWithOption(lead, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 
 	// Copy the operator type
-	if req.OperatorType != pb.OperatorType_UNSPECIFIED_OPERATOR {
-		value, ok := pb.OperatorType_name[int32(req.OperatorType)]
+	if req.OperatorType != authPb.OperatorType_UNSPECIFIED_OPERATOR {
+		value, ok := authPb.OperatorType_name[int32(req.OperatorType)]
 		if !ok {
-			lead.OperatorType = pb.OperatorType_name[int32(pb.OperatorType_UNSPECIFIED_OPERATOR)]
+			lead.OperatorType = authPb.OperatorType_name[int32(authPb.OperatorType_UNSPECIFIED_OPERATOR)]
 		}
 		lead.OperatorType = value
 	}
 
 	// Copy the lead channel
-	if req.Channel != pb.LeadChannel_UNSPECIFIED_CHANNEL {
-		value, ok := pb.LeadChannel_name[int32(req.Channel)]
+	if req.Channel != authPb.LeadChannel_UNSPECIFIED_CHANNEL {
+		value, ok := authPb.LeadChannel_name[int32(req.Channel)]
 		if !ok {
-			lead.Channel = pb.LeadChannel_name[int32(pb.LeadChannel_UNSPECIFIED_CHANNEL)]
+			lead.Channel = authPb.LeadChannel_name[int32(authPb.LeadChannel_UNSPECIFIED_CHANNEL)]
 		}
 		lead.Channel = value
 	}
 
 	// Copy the farming type
-	if req.FarmingType != pb.FarmingType_UnspecifiedFarming {
-		value, ok := pb.FarmingType_name[int32(req.FarmingType)]
+	if req.FarmingType != authPb.FarmingType_UnspecifiedFarming {
+		value, ok := authPb.FarmingType_name[int32(req.FarmingType)]
 		if !ok {
-			value = pb.FarmingType_name[int32(pb.FarmingType_UnspecifiedFarming)]
+			value = authPb.FarmingType_name[int32(authPb.FarmingType_UnspecifiedFarming)]
 		}
 		lead.FarmingType = value
 	}
 
 	// Copy the land size
-	if req.LandSizeInAcres != pb.LandSizeInAcres_UnspecifiedLandSize {
-		value, ok := pb.LandSizeInAcres_name[int32(req.LandSizeInAcres)]
+	if req.LandSizeInAcres != authPb.LandSizeInAcres_UnspecifiedLandSize {
+		value, ok := authPb.LandSizeInAcres_name[int32(req.LandSizeInAcres)]
 		if !ok {
-			value = pb.LandSizeInAcres_name[int32(pb.LandSizeInAcres_UnspecifiedLandSize)]
+			value = authPb.LandSizeInAcres_name[int32(authPb.LandSizeInAcres_UnspecifiedLandSize)]
 		}
 		lead.LandSizeInAcres = value
 	}
@@ -231,37 +231,37 @@ func getLeadModel(req *pb.CreateOrUpdateLeadRequest) *models.LeadModel {
 	return lead
 }
 
-func getLeadProto(lead *models.LeadModel) *pb.LeadProto {
-	leadProto := &pb.LeadProto{}
+func getLeadProto(lead *models.LeadModel) *authPb.LeadProto {
+	leadProto := &authPb.LeadProto{}
 	copier.CopyWithOption(leadProto, lead, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 
 	// Copy the operator type
-	value, ok := pb.OperatorType_value[lead.OperatorType]
+	value, ok := authPb.OperatorType_value[lead.OperatorType]
 	if !ok {
-		leadProto.OperatorType = pb.OperatorType_UNSPECIFIED_OPERATOR
+		leadProto.OperatorType = authPb.OperatorType_UNSPECIFIED_OPERATOR
 	}
-	leadProto.OperatorType = pb.OperatorType(value)
+	leadProto.OperatorType = authPb.OperatorType(value)
 
 	// Copy the lead channel
-	value, ok = pb.LeadChannel_value[lead.Channel]
+	value, ok = authPb.LeadChannel_value[lead.Channel]
 	if !ok {
-		leadProto.Channel = pb.LeadChannel_UNSPECIFIED_CHANNEL
+		leadProto.Channel = authPb.LeadChannel_UNSPECIFIED_CHANNEL
 	}
-	leadProto.Channel = pb.LeadChannel(value)
+	leadProto.Channel = authPb.LeadChannel(value)
 
 	// Copy the farming type
-	value, ok = pb.FarmingType_value[lead.FarmingType]
+	value, ok = authPb.FarmingType_value[lead.FarmingType]
 	if !ok {
-		leadProto.FarmingType = pb.FarmingType_UnspecifiedFarming
+		leadProto.FarmingType = authPb.FarmingType_UnspecifiedFarming
 	}
-	leadProto.FarmingType = pb.FarmingType(value)
+	leadProto.FarmingType = authPb.FarmingType(value)
 
 	// Copy the certification details
-	value, ok = pb.LandSizeInAcres_value[lead.LandSizeInAcres]
+	value, ok = authPb.LandSizeInAcres_value[lead.LandSizeInAcres]
 	if !ok {
-		leadProto.LandSizeInAcres = pb.LandSizeInAcres_UnspecifiedLandSize
+		leadProto.LandSizeInAcres = authPb.LandSizeInAcres_UnspecifiedLandSize
 	}
-	leadProto.LandSizeInAcres = pb.LandSizeInAcres(value)
+	leadProto.LandSizeInAcres = authPb.LandSizeInAcres(value)
 
 	// TODO: Copy the lead status
 
