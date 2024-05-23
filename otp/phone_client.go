@@ -6,7 +6,6 @@ import (
 	"unicode"
 
 	"github.com/Kotlang/authGo/db"
-	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/twilio/twilio-go"
 	openapi "github.com/twilio/twilio-go/rest/verify/v2"
@@ -17,8 +16,8 @@ type PhoneClientInterface interface {
 	db.AuthDbInterface
 	IsValid(emailOrPhone string) bool
 	SendOtp(phoneNumber string) error
-	SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel
-	GetLoginInfo(tenant, phone string) *models.LoginModel
+	SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db.LoginModel
+	GetLoginInfo(tenant, phone string) *db.LoginModel
 	Verify(to, otp string) bool
 }
 
@@ -39,7 +38,7 @@ func (c *PhoneClient) IsValid(emailOrPhone string) bool {
 	return len(emailOrPhone) == 10 && isAllDigit(emailOrPhone)
 }
 
-func (c *PhoneClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel {
+func (c *PhoneClient) SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db.LoginModel {
 	userType := strings.TrimSpace(loginInfo.UserType)
 
 	if len(userType) == 0 {
@@ -52,10 +51,10 @@ func (c *PhoneClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel)
 }
 
 // get login info using phone number
-func (c *PhoneClient) GetLoginInfo(tenant, phone string) *models.LoginModel {
+func (c *PhoneClient) GetLoginInfo(tenant, phone string) *db.LoginModel {
 	loginInfo := <-c.Db.Login(tenant).FindOneByPhoneOrEmail(phone, "")
 	if loginInfo == nil {
-		loginInfo = &models.LoginModel{
+		loginInfo = &db.LoginModel{
 			Phone:    phone,
 			UserType: "member",
 		}

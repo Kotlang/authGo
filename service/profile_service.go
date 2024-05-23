@@ -11,7 +11,6 @@ import (
 	"github.com/Kotlang/authGo/extensions"
 	authPb "github.com/Kotlang/authGo/generated/auth"
 	notificationPb "github.com/Kotlang/authGo/generated/notification"
-	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/bootUtils"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
@@ -29,7 +28,7 @@ type ProfileService struct {
 	cloudFns cloud.Cloud
 }
 
-func NewProfileService(db db.AuthDbInterface, cloudFns cloud.Cloud) *ProfileService {
+func ProvideProfileService(db db.AuthDbInterface, cloudFns cloud.Cloud) *ProfileService {
 	return &ProfileService{
 		db:       db,
 		cloudFns: cloudFns,
@@ -50,9 +49,11 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *authPb.
 	oldProfile := getExistingOrEmptyProfile(s.db, tenant, userId)
 
 	isNewUser := false
-	if len(oldProfile.UserId) == 0 {
+	if oldProfile == nil {
 		isNewUser = true
-		oldProfile.UserId = userId
+		oldProfile = &db.ProfileModel{
+			UserId: userId,
+		}
 	}
 
 	// merge old profile and new profile proto
@@ -88,7 +89,7 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *authPb.IdReque
 	}
 
 	loginResChan, errChan := s.db.Login(tenant).FindOneById(userId)
-	var login *models.LoginModel
+	var login *db.LoginModel
 	select {
 	case login = <-loginResChan:
 		if login.DeletionInfo.MarkedForDeletion && login.UserType != "admin" {
@@ -129,7 +130,7 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *authPb.Bu
 
 	// login info
 	loginResChan, errChan := s.db.Login(tenant).FindByIds(req.UserIds)
-	var loginInfo []models.LoginModel
+	var loginInfo []db.LoginModel
 	select {
 	case loginInfo = <-loginResChan:
 	case <-errChan:
@@ -307,7 +308,7 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *authPb.FetchPro
 	}
 
 	// populate phone number field in profile proto
-	var loginInfo []models.LoginModel
+	var loginInfo []db.LoginModel
 	select {
 	case loginInfo = <-loginInfoChan:
 	case <-errChan:
@@ -323,7 +324,7 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *authPb.FetchPro
 }
 
 // get profile proto from profile model
-func getProfileProto(profileModel *models.ProfileModel) *authPb.UserProfileProto {
+func getProfileProto(profileModel *db.ProfileModel) *authPb.UserProfileProto {
 	result := &authPb.UserProfileProto{}
 
 	if profileModel == nil {
@@ -360,10 +361,10 @@ func getProfileProto(profileModel *models.ProfileModel) *authPb.UserProfileProto
 }
 
 // get profile model from profile proto
-func getProfileModel(profileProto *authPb.CreateProfileRequest, profileModel *models.ProfileModel) *models.ProfileModel {
+func getProfileModel(profileProto *authPb.CreateProfileRequest, profileModel *db.ProfileModel) *db.ProfileModel {
 
 	if profileModel == nil {
-		profileModel = &models.ProfileModel{}
+		profileModel = &db.ProfileModel{}
 	}
 
 	copier.CopyWithOption(profileModel, profileProto, copier.Option{IgnoreEmpty: true, DeepCopy: true})
@@ -398,18 +399,15 @@ func getProfileModel(profileProto *authPb.CreateProfileRequest, profileModel *mo
 }
 
 // gets profile for userId or return empty model if doesn't exist.
-func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *models.ProfileModel {
-	profile := &models.ProfileModel{}
-
+func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *db.ProfileModel {
 	profileResChan, profileErrorChan := db.Profile(tenant).FindOneById(userId)
 
 	// in case of error, return empty profile.
 	select {
 	case profileRes := <-profileResChan:
-		profile = profileRes
+		return profileRes
 	case <-profileErrorChan:
 		logger.Error("Failed getting profile", zap.String("userId", userId), zap.String("tenant", tenant))
+		return nil
 	}
-
-	return profile
 }

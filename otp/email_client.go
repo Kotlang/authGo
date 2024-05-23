@@ -5,15 +5,14 @@ import (
 	"strings"
 
 	"github.com/Kotlang/authGo/db"
-	"github.com/Kotlang/authGo/models"
 )
 
 type EmailClientInterface interface {
 	db.AuthDbInterface
 	IsValid(emailOrPhone string) bool
 	SendOtp(emailId string) error
-	SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel
-	GetLoginInfo(tenant, email string) *models.LoginModel
+	SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db.LoginModel
+	GetLoginInfo(tenant, email string) *db.LoginModel
 	Verify(to, otp string) bool
 }
 
@@ -26,7 +25,7 @@ func (c *EmailClient) IsValid(emailOrPhone string) bool {
 	return match
 }
 
-func (c *EmailClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel {
+func (c *EmailClient) SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db.LoginModel {
 	userType := strings.TrimSpace(loginInfo.UserType)
 
 	if len(userType) == 0 {
@@ -38,10 +37,10 @@ func (c *EmailClient) SaveLoginInfo(tenant string, loginInfo *models.LoginModel)
 	return loginInfo
 }
 
-func (c *EmailClient) GetLoginInfo(tenant, email string) *models.LoginModel {
+func (c *EmailClient) GetLoginInfo(tenant, email string) *db.LoginModel {
 	loginInfo := <-c.Db.Login(tenant).FindOneByPhoneOrEmail("", email)
 	if loginInfo == nil {
-		loginInfo = &models.LoginModel{
+		loginInfo = &db.LoginModel{
 			Email:    email,
 			UserType: "member",
 		}

@@ -8,7 +8,6 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	authPb "github.com/Kotlang/authGo/generated/auth"
-	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
@@ -23,7 +22,7 @@ type ProfileMasterService struct {
 	db db.AuthDbInterface
 }
 
-func NewProfileMasterService(authDB db.AuthDbInterface) *ProfileMasterService {
+func ProvideProfileMasterService(authDB db.AuthDbInterface) *ProfileMasterService {
 	return &ProfileMasterService{
 		db: authDB,
 	}
@@ -162,7 +161,7 @@ func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *authPb
 		logger.Error("Language is not present")
 		return nil, status.Error(codes.InvalidArgument, "Language is not present")
 	}
-	profileMaster := &models.ProfileMasterModel{}
+	profileMaster := &db.ProfileMasterModel{}
 	copier.CopyWithOption(profileMaster, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 
 	err := <-s.db.ProfileMaster(tenant).Save(profileMaster)

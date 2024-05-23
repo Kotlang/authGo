@@ -3,7 +3,7 @@ module github.com/Kotlang/authGo
 go 1.19
 
 require (
-	github.com/SaiNageswarS/go-api-boot v0.1.36-0.20240302074729-626c6b5bab97
+	github.com/SaiNageswarS/go-api-boot v0.1.39
 	github.com/google/uuid v1.5.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/jinzhu/copier v0.3.2
@@ -13,6 +13,7 @@ require (
 	go.uber.org/zap v1.21.0
 	google.golang.org/grpc v1.61.0
 	google.golang.org/protobuf v1.32.0
+	github.com/google/wire v0.6.0
 )
 
 require (

@@ -5,7 +5,6 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	authPb "github.com/Kotlang/authGo/generated/auth"
-	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
@@ -24,7 +23,7 @@ type LeadService struct {
 	db db.AuthDbInterface
 }
 
-func NewLeadService(db db.AuthDbInterface) *LeadService {
+func ProvideLeadService(db db.AuthDbInterface) *LeadService {
 	return &LeadService{db: db}
 }
 
@@ -185,10 +184,10 @@ func (s *LeadService) FetchLeads(ctx context.Context, req *authPb.FetchLeadsRequ
 
 }
 
-func getLeadModel(req *authPb.CreateOrUpdateLeadRequest) *models.LeadModel {
+func getLeadModel(req *authPb.CreateOrUpdateLeadRequest) *db.LeadModel {
 
 	// copying the request to lead model
-	lead := &models.LeadModel{}
+	lead := &db.LeadModel{}
 	copier.CopyWithOption(lead, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 
 	// Copy the operator type
@@ -231,7 +230,7 @@ func getLeadModel(req *authPb.CreateOrUpdateLeadRequest) *models.LeadModel {
 	return lead
 }
 
-func getLeadProto(lead *models.LeadModel) *authPb.LeadProto {
+func getLeadProto(lead *db.LeadModel) *authPb.LeadProto {
 	leadProto := &authPb.LeadProto{}
 	copier.CopyWithOption(leadProto, lead, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 

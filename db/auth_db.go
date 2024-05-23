@@ -1,7 +1,6 @@
 package db
 
 import (
-	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 )
 
@@ -15,8 +14,12 @@ type AuthDbInterface interface {
 
 type AuthDb struct{}
 
+func ProvideAuthDb() AuthDbInterface {
+	return &AuthDb{}
+}
+
 func (a *AuthDb) Login(tenant string) LoginRepositoryInterface {
-	baseRepo := odm.UnimplementedBootRepository[models.LoginModel]{
+	baseRepo := odm.UnimplementedBootRepository[LoginModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "login",
 	}
@@ -25,7 +28,7 @@ func (a *AuthDb) Login(tenant string) LoginRepositoryInterface {
 }
 
 func (a *AuthDb) Profile(tenant string) ProfileRepositoryInterface {
-	baseRepo := odm.UnimplementedBootRepository[models.ProfileModel]{
+	baseRepo := odm.UnimplementedBootRepository[ProfileModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "profile",
 	}
@@ -33,7 +36,7 @@ func (a *AuthDb) Profile(tenant string) ProfileRepositoryInterface {
 }
 
 func (a *AuthDb) Tenant() TenantRepositoryInterface {
-	baseRepo := odm.UnimplementedBootRepository[models.TenantModel]{
+	baseRepo := odm.UnimplementedBootRepository[TenantModel]{
 		Database:       "global",
 		CollectionName: "tenant",
 	}
@@ -41,7 +44,7 @@ func (a *AuthDb) Tenant() TenantRepositoryInterface {
 }
 
 func (a *AuthDb) ProfileMaster(tenant string) ProfileMasterRepositoryInterface {
-	baseRepo := odm.UnimplementedBootRepository[models.ProfileMasterModel]{
+	baseRepo := odm.UnimplementedBootRepository[ProfileMasterModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "profile_master",
 	}
@@ -50,7 +53,7 @@ func (a *AuthDb) ProfileMaster(tenant string) ProfileMasterRepositoryInterface {
 }
 
 func (a *AuthDb) Lead(tenant string) LeadRepositoryInterface {
-	baseRepo := odm.UnimplementedBootRepository[models.LeadModel]{
+	baseRepo := odm.UnimplementedBootRepository[LeadModel]{
 		Database:       tenant + "_auth",
 		CollectionName: "lead",
 	}

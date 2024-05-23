@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/Kotlang/authGo/db"
-	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -96,7 +95,7 @@ func UserExistsAndUpdateLastActiveStreamInterceptor(db db.AuthDbInterface) grpc.
 	}
 }
 
-func checkUserExistenceAndStatus(loginInfo *models.LoginModel) error {
+func checkUserExistenceAndStatus(loginInfo *db.LoginModel) error {
 	if loginInfo.IsBlocked {
 		logger.Error("User is blocked", zap.String("userId", loginInfo.UserId))
 		return status.Error(codes.PermissionDenied, "User is blocked")

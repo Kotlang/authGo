@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/Kotlang/authGo/db"
-	"github.com/Kotlang/authGo/models"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -12,14 +11,14 @@ import (
 type Channel interface {
 	IsValid(to string) bool
 	SendOtp(to string) error
-	GetLoginInfo(tenant, to string) *models.LoginModel
-	SaveLoginInfo(tenant string, loginInfo *models.LoginModel) *models.LoginModel
+	GetLoginInfo(tenant, to string) *db.LoginModel
+	SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db.LoginModel
 	Verify(to, otp string) bool
 }
 
 type OtpClientInterface interface {
 	SendOtp(tenant, to string) error
-	GetLoginInfo(tenant, to string) *models.LoginModel
+	GetLoginInfo(tenant, to string) *db.LoginModel
 	ValidateOtp(tenant, to, otp string) bool
 }
 
@@ -28,7 +27,7 @@ type OtpClient struct {
 	channels []Channel
 }
 
-func NewOtpClient(db db.AuthDbInterface) OtpClientInterface {
+func ProvideOtpClient(db db.AuthDbInterface) OtpClientInterface {
 	return &OtpClient{
 		db:       db,
 		channels: []Channel{&EmailClient{Db: db}, &PhoneClient{Db: db}},
@@ -66,7 +65,7 @@ func (c *OtpClient) SendOtp(tenant, to string) error {
 	return status.Error(codes.InvalidArgument, "Incorrect email or phone")
 }
 
-func (c *OtpClient) GetLoginInfo(tenant, to string) *models.LoginModel {
+func (c *OtpClient) GetLoginInfo(tenant, to string) *db.LoginModel {
 	for _, channel := range c.channels {
 		if channel.IsValid(to) {
 			return channel.GetLoginInfo(tenant, to)

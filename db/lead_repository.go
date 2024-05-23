@@ -2,24 +2,51 @@ package db
 
 import (
 	authPb "github.com/Kotlang/authGo/generated/auth"
-	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
+	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
 )
 
+type LeadModel struct {
+	LeadId               string           `bson:"_id"`
+	Name                 string           `bson:"name"`
+	PhoneNumber          string           `bson:"phoneNumber"`
+	OperatorType         string           `bson:"operatorType"`
+	Channel              string           `bson:"channel"`
+	Source               string           `bson:"source"`
+	Addresses            []Addresses      `bson:"addresses"`
+	LandSizeInAcres      string           `bson:"landSizeInAcres"`
+	FarmingType          string           `bson:"farmingType"`
+	CertificationDetails CertificateModel `bson:"certificationDetails"`
+	Crops                []string         `bson:"crops"`
+	MainProfession       string           `bson:"mainProfession"`
+	OrganizationName     string           `bson:"organizationName"`
+	SideProfession       string           `bson:"sideProfession"`
+	UserInterviewNotes   string           `bson:"userInterviewNotes"`
+	Education            string           `bson:"education"`
+}
+
+func (m *LeadModel) Id() string {
+	if m.LeadId == "" {
+		m.LeadId = uuid.New().String()
+	}
+
+	return m.LeadId
+}
+
 type LeadRepositoryInterface interface {
-	odm.BootRepository[models.LeadModel]
-	FindByIds(ids []string) (chan []models.LeadModel, chan error)
-	GetLeads(leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []models.LeadModel, totalCount int)
+	odm.BootRepository[LeadModel]
+	FindByIds(ids []string) (chan []LeadModel, chan error)
+	GetLeads(leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []LeadModel, totalCount int)
 }
 
 type LeadRepository struct {
-	odm.UnimplementedBootRepository[models.LeadModel]
+	odm.UnimplementedBootRepository[LeadModel]
 }
 
-func (l *LeadRepository) FindByIds(ids []string) (chan []models.LeadModel, chan error) {
+func (l *LeadRepository) FindByIds(ids []string) (chan []LeadModel, chan error) {
 	filter := bson.M{
 		"_id": bson.M{
 			"$in": ids,
@@ -28,7 +55,7 @@ func (l *LeadRepository) FindByIds(ids []string) (chan []models.LeadModel, chan 
 	return l.Find(filter, nil, 0, 0)
 }
 
-func (l *LeadRepository) GetLeads(leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []models.LeadModel, totalCount int) {
+func (l *LeadRepository) GetLeads(leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []LeadModel, totalCount int) {
 
 	// get the filter
 	filter := getLeadFilter(leadFilters)

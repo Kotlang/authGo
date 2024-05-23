@@ -6,7 +6,6 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	authPb "github.com/Kotlang/authGo/generated/auth"
-	"github.com/Kotlang/authGo/models"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/jinzhu/copier"
@@ -21,7 +20,7 @@ type LoginVerifiedService struct {
 	db db.AuthDbInterface
 }
 
-func NewLoginVerifiedService(
+func ProvideLoginVerifiedService(
 	authDb db.AuthDbInterface) *LoginVerifiedService {
 
 	return &LoginVerifiedService{
@@ -39,7 +38,7 @@ func (s *LoginVerifiedService) RequestProfileDeletion(ctx context.Context, req *
 	select {
 	case loginRes := <-loginResChan:
 		// Mark profile for deletion
-		loginRes.DeletionInfo = models.DeletionInfo{
+		loginRes.DeletionInfo = db.DeletionInfo{
 			MarkedForDeletion: true,
 			DeletionTime:      time.Now().Unix(),
 			Reason:            req.Reason,
@@ -75,7 +74,7 @@ func (s *LoginVerifiedService) CancelProfileDeletionRequest(ctx context.Context,
 	select {
 	case loginRes := <-loginResChan:
 		// Cancel profile deletion request
-		loginRes.DeletionInfo = models.DeletionInfo{
+		loginRes.DeletionInfo = db.DeletionInfo{
 			MarkedForDeletion: false,
 			DeletionTime:      0,
 			Reason:            "",
@@ -127,7 +126,7 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 		logger.Error("Error fetching user count", zap.Error(err))
 	}
 
-	var login []models.LoginModel
+	var login []db.LoginModel
 	userIds := []string{}
 	select {
 	case login = <-loginResChan:
@@ -310,7 +309,7 @@ func (s *LoginVerifiedService) UnblockUser(ctx context.Context, req *authPb.IdRe
 	}, nil
 }
 
-func populateLoginInfo(userProfileProto []*authPb.UserProfileProto, loginInfo []models.LoginModel) {
+func populateLoginInfo(userProfileProto []*authPb.UserProfileProto, loginInfo []db.LoginModel) {
 	for i, profile := range userProfileProto {
 		for _, loginModel := range loginInfo {
 			if profile.UserId == loginModel.UserId {

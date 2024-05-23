@@ -7,7 +7,6 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	authPb "github.com/Kotlang/authGo/generated/auth"
-	"github.com/Kotlang/authGo/models"
 	"github.com/Kotlang/authGo/otp"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
@@ -23,7 +22,7 @@ type LoginService struct {
 	otp otp.OtpClientInterface
 }
 
-func NewLoginService(
+func ProvideLoginService(
 	authDb db.AuthDbInterface,
 	otp otp.OtpClientInterface) *LoginService {
 
@@ -55,7 +54,7 @@ func (s *LoginService) Login(ctx context.Context, req *authPb.LoginRequest) (*au
 
 	// get login details by phone or email
 	isPhone := isPhoneNumber(req.EmailOrPhone)
-	var loginDetails *models.LoginModel
+	var loginDetails *db.LoginModel
 	if isPhone {
 		loginDetails = <-s.db.Login(tenantDetails.Name).FindOneByPhoneOrEmail(req.EmailOrPhone, "")
 	} else {
