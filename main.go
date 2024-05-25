@@ -10,6 +10,7 @@ var grpcPort = ":50051"
 var webPort = ":8081"
 
 func main() {
+	server.LoadEnv()
 
 	app := InitializeApp()
 	app.CloudFns.LoadSecretsIntoEnv()

@@ -19,44 +19,44 @@ func ProvideAuthDb() AuthDbInterface {
 }
 
 func (a *AuthDb) Login(tenant string) LoginRepositoryInterface {
-	baseRepo := odm.UnimplementedBootRepository[LoginModel]{
-		Database:       tenant + "_auth",
-		CollectionName: "login",
-	}
+	baseRepo := odm.NewUnimplementedBootRepository[LoginModel](
+		odm.WithDatabase(tenant+"_auth"),
+		odm.WithCollectionName("login"),
+	)
 
 	return &LoginRepository{baseRepo}
 }
 
 func (a *AuthDb) Profile(tenant string) ProfileRepositoryInterface {
-	baseRepo := odm.UnimplementedBootRepository[ProfileModel]{
-		Database:       tenant + "_auth",
-		CollectionName: "profile",
-	}
+	baseRepo := odm.NewUnimplementedBootRepository[ProfileModel](
+		odm.WithDatabase(tenant+"_auth"),
+		odm.WithCollectionName("profile"),
+	)
 	return &ProfileRepository{baseRepo}
 }
 
 func (a *AuthDb) Tenant() TenantRepositoryInterface {
-	baseRepo := odm.UnimplementedBootRepository[TenantModel]{
-		Database:       "global",
-		CollectionName: "tenant",
-	}
+	baseRepo := odm.NewUnimplementedBootRepository[TenantModel](
+		odm.WithDatabase("global"),
+		odm.WithCollectionName("tenant"),
+	)
 	return &TenantRepository{baseRepo}
 }
 
 func (a *AuthDb) ProfileMaster(tenant string) ProfileMasterRepositoryInterface {
-	baseRepo := odm.UnimplementedBootRepository[ProfileMasterModel]{
-		Database:       tenant + "_auth",
-		CollectionName: "profile_master",
-	}
+	baseRepo := odm.NewUnimplementedBootRepository[ProfileMasterModel](
+		odm.WithDatabase(tenant+"_auth"),
+		odm.WithCollectionName("profile_master"),
+	)
 
 	return &ProfileMasterRepository{baseRepo}
 }
 
 func (a *AuthDb) Lead(tenant string) LeadRepositoryInterface {
-	baseRepo := odm.UnimplementedBootRepository[LeadModel]{
-		Database:       tenant + "_auth",
-		CollectionName: "lead",
-	}
+	baseRepo := odm.NewUnimplementedBootRepository[LeadModel](
+		odm.WithDatabase(tenant+"_auth"),
+		odm.WithCollectionName("lead"),
+	)
 
 	return &LeadRepository{baseRepo}
 }
