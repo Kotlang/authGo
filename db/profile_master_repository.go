@@ -12,19 +12,12 @@ type ProfileMasterModel struct {
 	Options  []string `bson:"options"`
 }
 
-func (m *ProfileMasterModel) Id() string {
+func (m ProfileMasterModel) Id() string {
 	return m.Language + "/" + m.Field
 }
 
-type ProfileMasterRepositoryInterface interface {
-	odm.BootRepository[ProfileMasterModel]
-	FindByLanguage(language string) (chan []ProfileMasterModel, chan error)
-}
+func (m ProfileMasterModel) CollectionName() string { return "profile_master" }
 
-type ProfileMasterRepository struct {
-	odm.UnimplementedBootRepository[ProfileMasterModel]
-}
-
-func (p *ProfileMasterRepository) FindByLanguage(language string) (chan []ProfileMasterModel, chan error) {
-	return p.Find(bson.M{"language": language}, nil, 0, 0)
+func FindByLanguage(mongo odm.MongoClient, tenant string, language string) (chan []ProfileMasterModel, chan error) {
+	return odm.CollectionOf[ProfileMasterModel](mongo, tenant).Find(bson.M{"language": language}, nil, 0, 0)
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/Kotlang/authGo/db"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -19,7 +20,7 @@ type ServiceCheckUserExistenceInterceptor interface {
 }
 
 // checks if the user exists and updates the last active time of the user
-func UserExistsAndUpdateLastActiveUnaryInterceptor(db db.AuthDbInterface) grpc.UnaryServerInterceptor {
+func UserExistsAndUpdateLastActiveUnaryInterceptor(mongo odm.MongoClient) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 
 		// check if the service has overridden the interceptor
@@ -33,7 +34,7 @@ func UserExistsAndUpdateLastActiveUnaryInterceptor(db db.AuthDbInterface) grpc.U
 		}
 
 		userId, tenant := auth.GetUserIdAndTenant(ctx)
-		loginResChan, errChan := db.Login(tenant).FindOneById(userId)
+		loginResChan, errChan := odm.CollectionOf[db.LoginModel](mongo, tenant).FindOneById(userId)
 		select {
 		case login := <-loginResChan:
 
@@ -42,7 +43,7 @@ func UserExistsAndUpdateLastActiveUnaryInterceptor(db db.AuthDbInterface) grpc.U
 			}
 
 			login.LastActive = time.Now().Unix()
-			err := <-db.Login(tenant).Save(login)
+			err := <-odm.CollectionOf[db.LoginModel](mongo, tenant).Save(login)
 			if err != nil {
 				logger.Error("Error updating last active time", zap.String("userId", userId), zap.Error(err))
 			}
@@ -56,7 +57,7 @@ func UserExistsAndUpdateLastActiveUnaryInterceptor(db db.AuthDbInterface) grpc.U
 	}
 }
 
-func UserExistsAndUpdateLastActiveStreamInterceptor(db db.AuthDbInterface) grpc.StreamServerInterceptor {
+func UserExistsAndUpdateLastActiveStreamInterceptor(mongo odm.MongoClient) grpc.StreamServerInterceptor {
 	return func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 
 		// check if the service has overridden the interceptor
@@ -71,7 +72,7 @@ func UserExistsAndUpdateLastActiveStreamInterceptor(db db.AuthDbInterface) grpc.
 		}
 
 		userId, tenant := auth.GetUserIdAndTenant(stream.Context())
-		loginResChan, errChan := db.Login(tenant).FindOneById(userId)
+		loginResChan, errChan := odm.CollectionOf[db.LoginModel](mongo, tenant).FindOneById(userId)
 		select {
 		case login := <-loginResChan:
 
@@ -80,7 +81,7 @@ func UserExistsAndUpdateLastActiveStreamInterceptor(db db.AuthDbInterface) grpc.
 			}
 
 			login.LastActive = time.Now().Unix()
-			err := <-db.Login(tenant).Save(login)
+			err := <-odm.CollectionOf[db.LoginModel](mongo, tenant).Save(login)
 			if err != nil {
 				logger.Error("Error updating last active time", zap.String("userId", userId), zap.Error(err))
 			}

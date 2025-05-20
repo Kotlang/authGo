@@ -10,6 +10,7 @@ import (
 	"github.com/Kotlang/authGo/otp"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/jinzhu/copier"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
@@ -18,17 +19,17 @@ import (
 
 type LoginService struct {
 	authPb.UnimplementedLoginServer
-	db  db.AuthDbInterface
-	otp otp.OtpClientInterface
+	mongo odm.MongoClient
+	otp   otp.OtpClientInterface
 }
 
 func ProvideLoginService(
-	authDb db.AuthDbInterface,
+	mongo odm.MongoClient,
 	otp otp.OtpClientInterface) *LoginService {
 
 	return &LoginService{
-		db:  authDb,
-		otp: otp,
+		mongo: mongo,
+		otp:   otp,
 	}
 }
 
@@ -47,18 +48,13 @@ func (s *LoginService) Login(ctx context.Context, req *authPb.LoginRequest) (*au
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
 
-	tenantDetails := <-s.db.Tenant().FindOneByToken(req.Domain)
-	if tenantDetails == nil {
-		return nil, status.Error(codes.PermissionDenied, "Invalid domain token")
-	}
-
 	// get login details by phone or email
 	isPhone := isPhoneNumber(req.EmailOrPhone)
 	var loginDetails *db.LoginModel
 	if isPhone {
-		loginDetails = <-s.db.Login(tenantDetails.Name).FindOneByPhoneOrEmail(req.EmailOrPhone, "")
+		loginDetails = <-db.FindOneByPhoneOrEmail(s.mongo, req.Domain, req.EmailOrPhone, "")
 	} else {
-		loginDetails = <-s.db.Login(tenantDetails.Name).FindOneByPhoneOrEmail("", req.EmailOrPhone)
+		loginDetails = <-db.FindOneByPhoneOrEmail(s.mongo, req.Domain, "", req.EmailOrPhone)
 	}
 
 	// check if user is blocked, if yes return error
@@ -87,7 +83,7 @@ func (s *LoginService) Login(ctx context.Context, req *authPb.LoginRequest) (*au
 	}
 
 	// send otp
-	err := s.otp.SendOtp(tenantDetails.Name, req.EmailOrPhone)
+	err := s.otp.SendOtp(req.Domain, req.EmailOrPhone)
 	if err != nil {
 		return nil, err
 	}
@@ -99,17 +95,12 @@ func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
 
-	tenantDetails := <-s.db.Tenant().FindOneByToken(req.Domain)
-	if tenantDetails == nil {
-		return nil, status.Error(codes.PermissionDenied, "Invalid Domain token")
-	}
-
-	loginInfo := s.otp.GetLoginInfo(tenantDetails.Name, req.EmailOrPhone)
+	loginInfo := s.otp.GetLoginInfo(req.Domain, req.EmailOrPhone)
 
 	// if phone number is excluded from verification, donot send otp
 	phoneNumberToExcludeVerification := os.Getenv("PHONE_NUMBER_TO_EXCLUDE_VERIFICATION")
 	if req.EmailOrPhone != phoneNumberToExcludeVerification {
-		if loginInfo == nil || !s.otp.ValidateOtp(tenantDetails.Name, req.EmailOrPhone, req.Otp) {
+		if loginInfo == nil || !s.otp.ValidateOtp(req.Domain, req.EmailOrPhone, req.Otp) {
 			return nil, status.Error(codes.PermissionDenied, "Wrong OTP")
 		}
 	}
@@ -131,7 +122,7 @@ func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*
 		loginInfo.DeletionInfo.DeletionTime = 0
 
 		// save the login info
-		err := <-s.db.Login(tenantDetails.Name).Save(loginInfo)
+		err := <-odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).Save(loginInfo)
 
 		if err != nil {
 			logger.Error("Error saving login info", zap.Error(err))
@@ -140,7 +131,7 @@ func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*
 
 	// fetch profile for user.
 	profileProto := &authPb.UserProfileProto{}
-	resultChan, errorChan := s.db.Profile(tenantDetails.Name).FindOneById(loginInfo.Id())
+	resultChan, errorChan := odm.CollectionOf[db.ProfileModel](s.mongo, req.Domain).FindOneById(loginInfo.Id())
 	select {
 	case profile := <-resultChan:
 		copier.Copy(profileProto, profile)
@@ -151,7 +142,12 @@ func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*
 	// copy login info to profile even if profile is not present.
 	copier.CopyWithOption(profileProto, loginInfo, copier.Option{IgnoreEmpty: true})
 
-	jwtToken := auth.GetToken(tenantDetails.Name, loginInfo.Id(), loginInfo.UserType)
+	jwtToken, err := auth.GetToken(req.Domain, loginInfo.Id(), loginInfo.UserType)
+
+	if err != nil {
+		logger.Error("Error generating jwt token", zap.Error(err))
+	}
+
 	return &authPb.AuthResponse{
 		Jwt:      jwtToken,
 		UserType: loginInfo.UserType,

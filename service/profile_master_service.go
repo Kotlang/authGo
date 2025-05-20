@@ -10,6 +10,7 @@ import (
 	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/jinzhu/copier"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
@@ -19,12 +20,12 @@ import (
 
 type ProfileMasterService struct {
 	authPb.UnimplementedProfileMasterServer
-	db db.AuthDbInterface
+	mongo odm.MongoClient
 }
 
-func ProvideProfileMasterService(authDB db.AuthDbInterface) *ProfileMasterService {
+func ProvideProfileMasterService(mongo odm.MongoClient) *ProfileMasterService {
 	return &ProfileMasterService{
-		db: authDB,
+		mongo: mongo,
 	}
 }
 
@@ -36,7 +37,7 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *authPb
 		language = "english"
 	}
 
-	profileMasterListChan, profileMasterListErrorChan := s.db.ProfileMaster(tenant).FindByLanguage(language)
+	profileMasterListChan, profileMasterListErrorChan := db.FindByLanguage(s.mongo, tenant, language)
 	list := make([]*authPb.ProfileMasterProto, 0)
 
 	select {
@@ -54,7 +55,7 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *authPb
 func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *authPb.GetLanguagesRequest) (*authPb.LanguagesResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
-	distinctLanguagesChan, distinctLanguagesErrorChan := s.db.ProfileMaster(tenant).Distinct("language", bson.D{}, 2*time.Second)
+	distinctLanguagesChan, distinctLanguagesErrorChan := odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Distinct("language", bson.D{}, 2*time.Second)
 	list := make([]string, 0)
 
 	select {
@@ -78,7 +79,7 @@ func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *authPb.Get
 func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *authPb.BulkGetProfileMasterRequest) (*authPb.ProfileMasterResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
+	loginModelChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
 	select {
 	case loginModel := <-loginModelChan:
 		fmt.Println(loginModel.Phone)
@@ -90,7 +91,7 @@ func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *au
 		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
 	}
 
-	profileMasterListChan, profileMasterListErrorChan := s.db.ProfileMaster(tenant).Find(bson.M{}, nil, 0, 0)
+	profileMasterListChan, profileMasterListErrorChan := odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Find(bson.M{}, nil, 0, 0)
 	list := make([]*authPb.ProfileMasterProto, 0)
 
 	select {
@@ -110,7 +111,7 @@ func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *au
 func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *authPb.DeleteProfileMasterRequest) (*authPb.DeleteProfileMasterResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
+	loginModelChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
 	select {
 	case loginModel := <-loginModelChan:
 		if loginModel.UserType != "admin" {
@@ -121,11 +122,11 @@ func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *aut
 		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
 	}
 
-	profileMasterChan, errChan := s.db.ProfileMaster(tenant).FindOneById(req.Id)
+	profileMasterChan, errChan := odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).FindOneById(req.Id)
 
 	select {
 	case profileMaster := <-profileMasterChan:
-		err := <-s.db.ProfileMaster(tenant).DeleteById(profileMaster.Id())
+		err := <-odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).DeleteById(profileMaster.Id())
 
 		if err != nil {
 			logger.Error("Internal error when deleting Profile Master with id: "+req.Id, zap.Error(err))
@@ -146,7 +147,7 @@ func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *aut
 func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *authPb.AddProfileMasterRequest) (*authPb.ProfileMasterProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
+	loginModelChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
 	select {
 	case loginModel := <-loginModelChan:
 		if loginModel.UserType != "admin" {
@@ -164,13 +165,13 @@ func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *authPb
 	profileMaster := &db.ProfileMasterModel{}
 	copier.CopyWithOption(profileMaster, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 
-	err := <-s.db.ProfileMaster(tenant).Save(profileMaster)
+	err := <-odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Save(profileMaster)
 
 	if err != nil {
 		logger.Error("Internal error when saving Profile Master with id: "+profileMaster.Id(), zap.Error(err))
 		return nil, status.Error(codes.Internal, err.Error())
 	} else {
-		profileMasterChan, errChan := s.db.ProfileMaster(tenant).FindOneById(profileMaster.Id())
+		profileMasterChan, errChan := odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).FindOneById(profileMaster.Id())
 		select {
 		case profileMaster := <-profileMasterChan:
 			profileMasterProto := &authPb.ProfileMasterProto{}
@@ -188,7 +189,7 @@ func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *authPb
 func (s *ProfileMasterService) UpdateProfileMaster(ctx context.Context, req *authPb.ProfileMasterProto) (*authPb.ProfileMasterProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginModelChan, errChan := s.db.Login(tenant).FindOneById(userId)
+	loginModelChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
 	select {
 	case loginModel := <-loginModelChan:
 		if loginModel.UserType != "admin" {
@@ -199,13 +200,13 @@ func (s *ProfileMasterService) UpdateProfileMaster(ctx context.Context, req *aut
 		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
 	}
 
-	profileMasterChan, errChain := s.db.ProfileMaster(tenant).FindOneById(req.Id)
+	profileMasterChan, errChain := odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).FindOneById(req.Id)
 
 	select {
 	case profileMaster := <-profileMasterChan:
 		copier.CopyWithOption(profileMaster, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 		profileMaster.Options = req.Options
-		err := <-s.db.ProfileMaster(tenant).Save(profileMaster)
+		err := <-odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Save(profileMaster)
 		if err != nil {
 			logger.Error("Internal error when saving Profile Master with id: "+profileMaster.Id(), zap.Error(err))
 			return nil, status.Error(codes.Internal, err.Error())

@@ -28,7 +28,7 @@ type LeadModel struct {
 	Education            string           `bson:"education"`
 }
 
-func (m *LeadModel) Id() string {
+func (m LeadModel) Id() string {
 	if m.LeadId == "" {
 		m.LeadId = uuid.New().String()
 	}
@@ -36,26 +36,18 @@ func (m *LeadModel) Id() string {
 	return m.LeadId
 }
 
-type LeadRepositoryInterface interface {
-	odm.BootRepository[LeadModel]
-	FindByIds(ids []string) (chan []LeadModel, chan error)
-	GetLeads(leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []LeadModel, totalCount int)
-}
+func (m LeadModel) CollectionName() string { return "leads" }
 
-type LeadRepository struct {
-	odm.UnimplementedBootRepository[LeadModel]
-}
-
-func (l *LeadRepository) FindByIds(ids []string) (chan []LeadModel, chan error) {
+func FindLeadsByIds(mongo odm.MongoClient, tenant string, ids []string) (chan []LeadModel, chan error) {
 	filter := bson.M{
 		"_id": bson.M{
 			"$in": ids,
 		},
 	}
-	return l.Find(filter, nil, 0, 0)
+	return odm.CollectionOf[LeadModel](mongo, tenant).Find(filter, nil, 0, 0)
 }
 
-func (l *LeadRepository) GetLeads(leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []LeadModel, totalCount int) {
+func GetLeads(mongo odm.MongoClient, tenant string, leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []LeadModel, totalCount int) {
 
 	// get the filter
 	filter := getLeadFilter(leadFilters)
@@ -69,8 +61,8 @@ func (l *LeadRepository) GetLeads(leadFilters *authPb.LeadFilters, PageSize, Pag
 	}
 
 	// get the leads
-	resultChan, errChan := l.Find(filter, sort, PageSize, skip)
-	totalCountResChan, countErrChan := l.CountDocuments(filter)
+	resultChan, errChan := odm.CollectionOf[LeadModel](mongo, tenant).Find(filter, sort, PageSize, skip)
+	totalCountResChan, countErrChan := odm.CollectionOf[LeadModel](mongo, tenant).CountDocuments(filter)
 	totalCount = 0
 
 	select {

@@ -51,30 +51,22 @@ type ProfileModel struct {
 	LandSizeInAcres          string           `bson:"landSizeInAcres" json:"landSizeInAcres"`
 }
 
-func (m *ProfileModel) Id() string {
+func (m ProfileModel) Id() string {
 	return m.UserId
 }
 
-type ProfileRepositoryInterface interface {
-	odm.BootRepository[ProfileModel]
-	FindByIds(ids []string) (chan []ProfileModel, chan error)
-	GetProfiles(userfilters *authPb.Userfilters, PageSize, PageNumber int64) ([]ProfileModel, int)
-}
+func (m ProfileModel) CollectionName() string { return "profiles" }
 
-type ProfileRepository struct {
-	odm.UnimplementedBootRepository[ProfileModel]
-}
-
-func (p *ProfileRepository) FindByIds(ids []string) (chan []ProfileModel, chan error) {
+func FindProfilesByIds(mongo odm.MongoClient, tenant string, ids []string) (chan []ProfileModel, chan error) {
 	filter := bson.M{
 		"_id": bson.M{
 			"$in": ids,
 		},
 	}
-	return p.Find(filter, nil, int64(len(ids)), 0)
+	return odm.CollectionOf[ProfileModel](mongo, tenant).Find(filter, nil, int64(len(ids)), 0)
 }
 
-func (t *ProfileRepository) GetProfiles(userfilters *authPb.Userfilters, PageSize, PageNumber int64) (profiles []ProfileModel, totalCount int) {
+func GetProfiles(mongo odm.MongoClient, tenant string, userfilters *authPb.Userfilters, PageSize, PageNumber int64) (profiles []ProfileModel, totalCount int) {
 	filters := bson.M{}
 
 	if name := userfilters.Name; name != "" {
@@ -95,8 +87,8 @@ func (t *ProfileRepository) GetProfiles(userfilters *authPb.Userfilters, PageSiz
 
 	skip := PageNumber * PageSize
 
-	resultChan, errChan := t.Find(filters, nil, PageSize, skip)
-	totalCountResChan, countErrChan := t.CountDocuments(filters)
+	resultChan, errChan := odm.CollectionOf[ProfileModel](mongo, tenant).Find(filters, nil, PageSize, skip)
+	totalCountResChan, countErrChan := odm.CollectionOf[ProfileModel](mongo, tenant).CountDocuments(filters)
 	totalCount = 0
 
 	select {

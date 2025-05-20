@@ -7,24 +7,20 @@ import (
 	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/jinzhu/copier"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-type LeadServiceInterface interface {
-	authPb.LeadServiceServer
-	db.AuthDbInterface
-}
-
 type LeadService struct {
 	authPb.UnimplementedLeadServiceServer
-	db db.AuthDbInterface
+	mongo odm.MongoClient
 }
 
-func ProvideLeadService(db db.AuthDbInterface) *LeadService {
-	return &LeadService{db: db}
+func ProvideLeadService(mongo odm.MongoClient) *LeadService {
+	return &LeadService{mongo: mongo}
 }
 
 // Admin only API
@@ -33,7 +29,7 @@ func (s *LeadService) CreateLead(ctx context.Context, req *authPb.CreateOrUpdate
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		logger.Error("User is not admin", zap.String("userId", userId))
 		return nil, status.Error(codes.PermissionDenied, "User is not admin")
 	}
@@ -41,7 +37,7 @@ func (s *LeadService) CreateLead(ctx context.Context, req *authPb.CreateOrUpdate
 	lead := getLeadModel(req)
 
 	// save to db
-	err := <-s.db.Lead(tenant).Save(lead)
+	err := <-odm.CollectionOf[db.LeadModel](s.mongo, tenant).Save(lead)
 
 	if err != nil {
 		logger.Error("Error saving lead", zap.Error(err))
@@ -59,13 +55,13 @@ func (s *LeadService) GetLeadById(ctx context.Context, req *authPb.LeadIdRequest
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		logger.Error("User is not admin", zap.String("userId", userId))
 		return nil, status.Error(codes.PermissionDenied, "User is not admin")
 	}
 
 	// get the lead from db
-	leadResChan, errChan := s.db.Lead(tenant).FindOneById(req.LeadId)
+	leadResChan, errChan := odm.CollectionOf[db.LeadModel](s.mongo, tenant).FindOneById(req.LeadId)
 	select {
 	case lead := <-leadResChan:
 		leadProto := getLeadProto(lead)
@@ -81,13 +77,13 @@ func (s *LeadService) BulkGetLeadsById(ctx context.Context, req *authPb.BulkIdRe
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		logger.Error("User is not admin", zap.String("userId", userId))
 		return nil, status.Error(codes.PermissionDenied, "User is not admin")
 	}
 
 	// get the leads from db
-	leadResChan, errChan := s.db.Lead(tenant).FindByIds(req.LeadIds)
+	leadResChan, errChan := db.FindLeadsByIds(s.mongo, tenant, req.LeadIds)
 	select {
 	case leads := <-leadResChan:
 		leadProtos := make([]*authPb.LeadProto, len(leads))
@@ -107,7 +103,7 @@ func (s *LeadService) UpdateLead(ctx context.Context, req *authPb.CreateOrUpdate
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		logger.Error("User is not admin", zap.String("userId", userId))
 		return nil, status.Error(codes.PermissionDenied, "User is not admin")
 	}
@@ -116,7 +112,7 @@ func (s *LeadService) UpdateLead(ctx context.Context, req *authPb.CreateOrUpdate
 	lead := getLeadModel(req)
 
 	// save to db
-	err := <-s.db.Lead(tenant).Save(lead)
+	err := <-odm.CollectionOf[db.LeadModel](s.mongo, tenant).Save(lead)
 
 	if err != nil {
 		logger.Error("Error saving lead", zap.Error(err))
@@ -134,13 +130,13 @@ func (s *LeadService) DeleteLead(ctx context.Context, req *authPb.LeadIdRequest)
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		logger.Error("User is not admin", zap.String("userId", userId))
 		return nil, status.Error(codes.PermissionDenied, "User is not admin")
 	}
 
 	// delete the lead
-	err := <-s.db.Lead(tenant).DeleteById(req.LeadId)
+	err := <-odm.CollectionOf[db.LeadModel](s.mongo, tenant).DeleteById(req.LeadId)
 	if err != nil {
 		logger.Error("Error deleting lead", zap.Error(err))
 		return nil, err
@@ -156,7 +152,7 @@ func (s *LeadService) FetchLeads(ctx context.Context, req *authPb.FetchLeadsRequ
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		logger.Error("User is not admin", zap.String("userId", userId))
 		return nil, status.Error(codes.PermissionDenied, "User is not admin")
 	}
@@ -170,7 +166,7 @@ func (s *LeadService) FetchLeads(ctx context.Context, req *authPb.FetchLeadsRequ
 	}
 
 	// get the leads from db
-	leads, totalCount := s.db.Lead(tenant).GetLeads(req.LeadFilters, int64(req.PageSize), int64(req.PageNumber))
+	leads, totalCount := db.GetLeads(s.mongo, tenant, req.LeadFilters, int64(req.PageSize), int64(req.PageNumber))
 
 	leadProtos := make([]*authPb.LeadProto, len(leads))
 	for i, lead := range leads {

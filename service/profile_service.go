@@ -14,7 +14,9 @@ import (
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/bootUtils"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
+	"github.com/SaiNageswarS/go-api-boot/config"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/jinzhu/copier"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
@@ -24,14 +26,16 @@ import (
 
 type ProfileService struct {
 	authPb.UnimplementedProfileServer
-	db       db.AuthDbInterface
+	ccfg     *config.BootConfig
+	mongo    odm.MongoClient
 	cloudFns cloud.Cloud
 }
 
-func ProvideProfileService(db db.AuthDbInterface, cloudFns cloud.Cloud) *ProfileService {
+func ProvideProfileService(mongo odm.MongoClient, cloudFns cloud.Cloud, ccfg *config.BootConfig) *ProfileService {
 	return &ProfileService{
-		db:       db,
+		mongo:    mongo,
 		cloudFns: cloudFns,
+		ccfg:     ccfg,
 	}
 }
 
@@ -46,7 +50,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *authPb.
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// get existing profile
-	oldProfile := getExistingOrEmptyProfile(s.db, tenant, userId)
+	oldProfile := getExistingOrEmptyProfile(s.mongo, tenant, userId)
 
 	isNewUser := false
 	if oldProfile == nil {
@@ -60,7 +64,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *authPb.
 	oldProfile = getProfileModel(req, oldProfile)
 
 	// save profile to db
-	err = <-s.db.Profile(tenant).Save(oldProfile)
+	err = <-odm.CollectionOf[db.ProfileModel](s.mongo, tenant).Save(oldProfile)
 
 	// if user is new, register notification event for user created.
 	if isNewUser {
@@ -88,7 +92,7 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *authPb.IdReque
 		userId = req.UserId
 	}
 
-	loginResChan, errChan := s.db.Login(tenant).FindOneById(userId)
+	loginResChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
 	var login *db.LoginModel
 	select {
 	case login = <-loginResChan:
@@ -103,7 +107,7 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *authPb.IdReque
 		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
 	}
 
-	profileResChan, errChan := s.db.Profile(tenant).FindOneById(userId)
+	profileResChan, errChan := odm.CollectionOf[db.ProfileModel](s.mongo, tenant).FindOneById(userId)
 	select {
 	case profile := <-profileResChan:
 		profileProto := getProfileProto(profile)
@@ -129,7 +133,7 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *authPb.Bu
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// login info
-	loginResChan, errChan := s.db.Login(tenant).FindByIds(req.UserIds)
+	loginResChan, errChan := db.FindLoginsByIds(s.mongo, tenant, req.UserIds)
 	var loginInfo []db.LoginModel
 	select {
 	case loginInfo = <-loginResChan:
@@ -146,7 +150,7 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *authPb.Bu
 		}
 	}
 
-	profileResChan, profileErrorChan := s.db.Profile(tenant).FindByIds(userIds)
+	profileResChan, profileErrorChan := db.FindProfilesByIds(s.mongo, tenant, userIds)
 
 	select {
 	case profileRes := <-profileResChan:
@@ -194,7 +198,7 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *auth
 		return nil, status.Error(codes.Internal, "profile_bucket is not set")
 	}
 
-	preSignedUrl, downloadUrl := s.cloudFns.GetPresignedUrl(profileBucket, key, contentType, 10*time.Minute)
+	preSignedUrl, downloadUrl := s.cloudFns.GetPresignedUrl(s.ccfg, profileBucket, key, contentType, 10*time.Minute)
 	return &authPb.ProfileImageUploadURL{
 		UploadUrl:    preSignedUrl,
 		MediaUrl:     downloadUrl,
@@ -235,7 +239,7 @@ func (s *ProfileService) UploadProfileImage(stream authPb.Profile_UploadProfileI
 	if profileBucket == "" {
 		return status.Error(codes.Internal, "profile_bucket is not set")
 	}
-	resultChan, errorChan := s.cloudFns.UploadStream(profileBucket, path, imageData)
+	resultChan, errorChan := s.cloudFns.UploadStream(s.ccfg, profileBucket, path, imageData.Bytes())
 
 	select {
 	case result := <-resultChan:
@@ -258,18 +262,18 @@ func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *auth
 	}
 
 	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userID) {
+	if !db.IsAdmin(s.mongo, tenant, userID) {
 		return nil, status.Error(codes.PermissionDenied, "User with id "+userID+" don't have permission")
 	}
 
 	// get login info using email or phone
-	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
+	loginModel := <-db.FindOneByPhoneOrEmail(s.mongo, tenant, req.Phone, req.Email)
 
 	if loginModel == nil {
 		return nil, status.Error(codes.NotFound, "User not found")
 	}
 
-	profileResChan, errChan := s.db.Profile(tenant).FindOneById(loginModel.UserId)
+	profileResChan, errChan := odm.CollectionOf[db.ProfileModel](s.mongo, tenant).FindOneById(loginModel.UserId)
 	select {
 	case profile := <-profileResChan:
 		return getProfileProto(profile), nil
@@ -288,11 +292,11 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *authPb.FetchPro
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
 	}
 
-	profiles, totalCount := s.db.Profile(tenant).GetProfiles(req.Filters, int64(req.PageSize), int64(req.PageNumber))
+	profiles, totalCount := db.GetProfiles(s.mongo, tenant, req.Filters, int64(req.PageSize), int64(req.PageNumber))
 
 	userIds := []string{}
 	for _, profile := range profiles {
@@ -300,7 +304,7 @@ func (s *ProfileService) FetchProfiles(ctx context.Context, req *authPb.FetchPro
 	}
 
 	// get login info using userId
-	loginInfoChan, errChan := s.db.Login(tenant).FindByIds(userIds)
+	loginInfoChan, errChan := db.FindLoginsByIds(s.mongo, tenant, userIds)
 
 	userProfileProto := []*authPb.UserProfileProto{}
 	for _, userModel := range profiles {
@@ -399,8 +403,8 @@ func getProfileModel(profileProto *authPb.CreateProfileRequest, profileModel *db
 }
 
 // gets profile for userId or return empty model if doesn't exist.
-func getExistingOrEmptyProfile(db db.AuthDbInterface, tenant, userId string) *db.ProfileModel {
-	profileResChan, profileErrorChan := db.Profile(tenant).FindOneById(userId)
+func getExistingOrEmptyProfile(mongo odm.MongoClient, tenant, userId string) *db.ProfileModel {
+	profileResChan, profileErrorChan := odm.CollectionOf[db.ProfileModel](mongo, tenant).FindOneById(userId)
 
 	// in case of error, return empty profile.
 	select {

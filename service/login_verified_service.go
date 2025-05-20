@@ -8,6 +8,7 @@ import (
 	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/jinzhu/copier"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/zap"
@@ -17,14 +18,14 @@ import (
 
 type LoginVerifiedService struct {
 	authPb.UnimplementedLoginVerifiedServer
-	db db.AuthDbInterface
+	mongo odm.MongoClient
 }
 
 func ProvideLoginVerifiedService(
-	authDb db.AuthDbInterface) *LoginVerifiedService {
+	mongo odm.MongoClient) *LoginVerifiedService {
 
 	return &LoginVerifiedService{
-		db: authDb,
+		mongo: mongo,
 	}
 }
 
@@ -33,7 +34,7 @@ func (s *LoginVerifiedService) RequestProfileDeletion(ctx context.Context, req *
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Fetch profile info
-	loginResChan, errChan := s.db.Login(tenant).FindOneById(userId)
+	loginResChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
 
 	select {
 	case loginRes := <-loginResChan:
@@ -43,7 +44,7 @@ func (s *LoginVerifiedService) RequestProfileDeletion(ctx context.Context, req *
 			DeletionTime:      time.Now().Unix(),
 			Reason:            req.Reason,
 		}
-		err := <-s.db.Login(tenant).Save(loginRes)
+		err := <-odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(loginRes)
 		if err != nil {
 			logger.Error("Failed saving profile deletion request", zap.Error(err))
 			return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
@@ -64,12 +65,12 @@ func (s *LoginVerifiedService) CancelProfileDeletionRequest(ctx context.Context,
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
 	}
 
 	// Fetch profile info
-	loginResChan, errChan := s.db.Login(tenant).FindOneById(req.UserId)
+	loginResChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(req.UserId)
 
 	select {
 	case loginRes := <-loginResChan:
@@ -79,7 +80,7 @@ func (s *LoginVerifiedService) CancelProfileDeletionRequest(ctx context.Context,
 			DeletionTime:      0,
 			Reason:            "",
 		}
-		err := <-s.db.Login(tenant).Save(loginRes)
+		err := <-odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(loginRes)
 		if err != nil {
 			logger.Error("Failed saving profile deletion request", zap.Error(err))
 			return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
@@ -100,7 +101,7 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 	userID, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userID) {
+	if !db.IsAdmin(s.mongo, tenant, userID) {
 		return nil, status.Error(codes.PermissionDenied, "User with id "+userID+" don't have permission")
 	}
 
@@ -114,8 +115,8 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 	}
 
 	skip := int64(req.PageNumber * req.PageSize)
-	loginResChan, errChan := s.db.Login(tenant).Find(filter, nil, int64(req.PageSize), skip)
-	totalCountResChan, countErrChan := s.db.Login(tenant).CountDocuments(filter)
+	loginResChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).Find(filter, nil, int64(req.PageSize), skip)
+	totalCountResChan, countErrChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).CountDocuments(filter)
 
 	// get total count of pending profile deletion requests
 	totalCount := 0
@@ -139,7 +140,7 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 	}
 
 	// Fetch profiles for pending profile deletion requests
-	profileResChan, errChan := s.db.Profile(tenant).FindByIds(userIds)
+	profileResChan, errChan := db.FindProfilesByIds(s.mongo, tenant, userIds)
 	select {
 	case profiles := <-profileResChan:
 		profileProto := []*authPb.UserProfileProto{}
@@ -164,12 +165,12 @@ func (s *LoginVerifiedService) DeleteProfile(ctx context.Context, req *authPb.Id
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
 	}
 
 	// Check if profile exists
-	isExists := s.db.Profile(tenant).IsExistsById(req.UserId)
+	isExists := odm.CollectionOf[db.ProfileModel](s.mongo, tenant).IsExistsById(req.UserId)
 
 	if !isExists {
 		return &authPb.StatusResponse{
@@ -178,14 +179,14 @@ func (s *LoginVerifiedService) DeleteProfile(ctx context.Context, req *authPb.Id
 	}
 
 	// Delete profile from db
-	err := <-s.db.Profile(tenant).DeleteById(req.UserId)
+	err := <-odm.CollectionOf[db.ProfileModel](s.mongo, tenant).DeleteById(req.UserId)
 	if err != nil {
 		logger.Error("Failed deleting profile", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed deleting profile")
 	}
 
 	// Delete login from db
-	err = <-s.db.Login(tenant).DeleteById(req.UserId)
+	err = <-odm.CollectionOf[db.LoginModel](s.mongo, tenant).DeleteById(req.UserId)
 	if err != nil {
 		logger.Error("Failed deleting login", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed deleting login")
@@ -208,11 +209,11 @@ func (s *LoginVerifiedService) IsUserAdmin(ctx context.Context, req *authPb.IdRe
 	}
 
 	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
 	}
 
-	isAdmin := s.db.Login(tenant).IsAdmin(userId)
+	isAdmin := db.IsAdmin(s.mongo, tenant, userId)
 
 	return &authPb.IsUserAdminResponse{
 		IsAdmin: isAdmin,
@@ -224,12 +225,12 @@ func (s *LoginVerifiedService) ChangeUserType(ctx context.Context, req *authPb.C
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
 	}
 
 	// fetch login info
-	loginModel := <-s.db.Login(tenant).FindOneByPhoneOrEmail(req.Phone, req.Email)
+	loginModel := <-db.FindOneByPhoneOrEmail(s.mongo, tenant, req.Phone, req.Email)
 	if loginModel == nil {
 		return nil, status.Error(codes.NotFound, "User not found")
 	}
@@ -238,7 +239,7 @@ func (s *LoginVerifiedService) ChangeUserType(ctx context.Context, req *authPb.C
 	loginModel.UserType = req.UserType.String()
 
 	// save login info
-	err := <-s.db.Login(tenant).Save(loginModel)
+	err := <-odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(loginModel)
 	if err != nil {
 		logger.Error("Failed changing user type", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed changing user type")
@@ -255,17 +256,17 @@ func (s *LoginVerifiedService) BlockUser(ctx context.Context, req *authPb.IdRequ
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
 	}
 
 	// fetch login info
-	loginResChan, errChan := s.db.Login(tenant).FindOneById(req.UserId)
+	loginResChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(req.UserId)
 	select {
 	case loginRes := <-loginResChan:
 		// block user
 		loginRes.IsBlocked = true
-		err := <-s.db.Login(tenant).Save(loginRes)
+		err := <-odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(loginRes)
 		if err != nil {
 			logger.Error("Failed blocking user", zap.Error(err))
 			return nil, status.Error(codes.Internal, "Failed blocking user")
@@ -285,17 +286,17 @@ func (s *LoginVerifiedService) UnblockUser(ctx context.Context, req *authPb.IdRe
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Check if user is admin
-	if !s.db.Login(tenant).IsAdmin(userId) {
+	if !db.IsAdmin(s.mongo, tenant, userId) {
 		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
 	}
 
 	// fetch login info
-	loginResChan, errChan := s.db.Login(tenant).FindOneById(req.UserId)
+	loginResChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(req.UserId)
 	select {
 	case loginRes := <-loginResChan:
 		// unblock user
 		loginRes.IsBlocked = false
-		err := <-s.db.Login(tenant).Save(loginRes)
+		err := <-odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(loginRes)
 		if err != nil {
 			logger.Error("Failed unblocking user", zap.Error(err))
 			return nil, status.Error(codes.Internal, "Failed unblocking user")

@@ -1,34 +1,61 @@
 package main
 
 import (
+	"context"
+
 	authPb "github.com/Kotlang/authGo/generated/auth"
+	"github.com/Kotlang/authGo/interceptors"
+	"github.com/Kotlang/authGo/otp"
+	"github.com/Kotlang/authGo/service"
+	"github.com/SaiNageswarS/go-api-boot/cloud"
+	"github.com/SaiNageswarS/go-api-boot/config"
+	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-api-boot/server"
-	"github.com/rs/cors"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.uber.org/zap"
 )
 
-var grpcPort = ":50051"
-var webPort = ":8081"
-
 func main() {
-	server.LoadEnv()
+	cloudFns := &cloud.Azure{}
 
-	app := InitializeApp()
-	app.CloudFns.LoadSecretsIntoEnv()
+	ccfgg := &config.BootConfig{}
+	config.LoadConfig("config.ini", ccfgg)
 
-	corsConfig := cors.New(
-		cors.Options{
-			AllowedHeaders: []string{"*"},
-		})
-	bootServer := server.NewGoApiBoot(
-		server.WithCorsConfig(corsConfig),
-		server.AppendUnaryInterceptors(app.UnaryInterceptors),
-		server.AppendStreamInterceptors(app.StreamInterceptors))
+	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(ccfgg.MongoUri))
+	if err != nil {
+		logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
+	}
 
-	authPb.RegisterLoginServer(bootServer.GrpcServer, app.LoginService)
-	authPb.RegisterLoginVerifiedServer(bootServer.GrpcServer, app.LoginVerifiedService)
-	authPb.RegisterProfileServer(bootServer.GrpcServer, app.ProfileService)
-	authPb.RegisterProfileMasterServer(bootServer.GrpcServer, app.ProfileMasterService)
-	authPb.RegisterLeadServiceServer(bootServer.GrpcServer, app.LeadService)
+	logger.Info("MongoDB connected")
 
-	bootServer.Start(grpcPort, webPort)
+	otpClient := &otp.DevOtpClient{}
+
+	boot, err := server.New(ccfgg).
+		GRPCPort(":50051").
+		HTTPPort(":8080").
+		// Dependency injection
+		Provide(ccfgg).
+		ProvideAs(cloudFns, (*cloud.Cloud)(nil)).
+		ProvideAs(mongoClient, (*odm.MongoClient)(nil)).
+		ProvideAs(otpClient, (*otp.OtpClientInterface)(nil)).
+		// Custom Interceptors
+		Unary(interceptors.UserExistsAndUpdateLastActiveUnaryInterceptor(mongoClient)).
+		// Register gRPC service impls
+		Register(server.Adapt(authPb.RegisterLoginServer), service.ProvideLoginService).
+		Register(server.Adapt(authPb.RegisterLoginVerifiedServer), service.ProvideLoginVerifiedService).
+		Register(server.Adapt(authPb.RegisterProfileServer), service.ProvideProfileService).
+		Register(server.Adapt(authPb.RegisterProfileMasterServer), service.ProvideProfileMasterService).
+		Register(server.Adapt(authPb.RegisterLeadServiceServer), service.ProvideLeadService).
+		Build()
+
+	if err != nil {
+		logger.Fatal("Failed to create server", zap.Error(err))
+	}
+
+	logger.Info("Starting server...")
+	ctx, _ := context.WithCancel(context.Background())
+	boot.Serve(ctx)
+	logger.Info("Server shutdown cleanly")
 }

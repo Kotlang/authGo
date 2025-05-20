@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Kotlang/authGo/db"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -23,14 +24,14 @@ type OtpClientInterface interface {
 }
 
 type OtpClient struct {
-	db       db.AuthDbInterface
+	mongo    odm.MongoClient
 	channels []Channel
 }
 
-func ProvideOtpClient(db db.AuthDbInterface) OtpClientInterface {
+func ProvideOtpClient(mongo odm.MongoClient) OtpClientInterface {
 	return &OtpClient{
-		db:       db,
-		channels: []Channel{&EmailClient{Db: db}, &PhoneClient{Db: db}},
+		mongo:    mongo,
+		channels: []Channel{&EmailClient{mongo: mongo}, &PhoneClient{mongo: mongo}},
 	}
 }
 

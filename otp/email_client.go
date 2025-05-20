@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"github.com/Kotlang/authGo/db"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 )
 
 type EmailClientInterface interface {
-	db.AuthDbInterface
 	IsValid(emailOrPhone string) bool
 	SendOtp(emailId string) error
 	SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db.LoginModel
@@ -17,7 +17,7 @@ type EmailClientInterface interface {
 }
 
 type EmailClient struct {
-	Db db.AuthDbInterface
+	mongo odm.MongoClient
 }
 
 func (c *EmailClient) IsValid(emailOrPhone string) bool {
@@ -32,13 +32,13 @@ func (c *EmailClient) SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db
 		loginInfo.UserType = "member"
 	}
 
-	<-c.Db.Login(tenant).Save(loginInfo)
+	<-odm.CollectionOf[db.LoginModel](c.mongo, tenant).Save(loginInfo)
 
 	return loginInfo
 }
 
 func (c *EmailClient) GetLoginInfo(tenant, email string) *db.LoginModel {
-	loginInfo := <-c.Db.Login(tenant).FindOneByPhoneOrEmail("", email)
+	loginInfo := <-db.FindOneByPhoneOrEmail(c.mongo, tenant, "", email)
 	if loginInfo == nil {
 		loginInfo = &db.LoginModel{
 			Email:    email,

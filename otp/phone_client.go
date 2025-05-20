@@ -7,13 +7,13 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	"github.com/SaiNageswarS/go-api-boot/logger"
+	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/twilio/twilio-go"
 	openapi "github.com/twilio/twilio-go/rest/verify/v2"
 	"go.uber.org/zap"
 )
 
 type PhoneClientInterface interface {
-	db.AuthDbInterface
 	IsValid(emailOrPhone string) bool
 	SendOtp(phoneNumber string) error
 	SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db.LoginModel
@@ -22,7 +22,7 @@ type PhoneClientInterface interface {
 }
 
 type PhoneClient struct {
-	Db db.AuthDbInterface
+	mongo odm.MongoClient
 }
 
 func isAllDigit(s string) bool {
@@ -45,14 +45,14 @@ func (c *PhoneClient) SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db
 		loginInfo.UserType = "member"
 	}
 
-	<-c.Db.Login(tenant).Save(loginInfo)
+	<-odm.CollectionOf[db.LoginModel](c.mongo, tenant).Save(loginInfo)
 
 	return loginInfo
 }
 
 // get login info using phone number
 func (c *PhoneClient) GetLoginInfo(tenant, phone string) *db.LoginModel {
-	loginInfo := <-c.Db.Login(tenant).FindOneByPhoneOrEmail(phone, "")
+	loginInfo := <-db.FindOneByPhoneOrEmail(c.mongo, tenant, phone, "")
 	if loginInfo == nil {
 		loginInfo = &db.LoginModel{
 			Phone:    phone,
