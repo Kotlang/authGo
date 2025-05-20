@@ -54,7 +54,6 @@ func main() {
 		logger.Fatal("Failed to create server", zap.Error(err))
 	}
 
-	logger.Info("Starting server...")
 	ctx, _ := context.WithCancel(context.Background())
 	boot.Serve(ctx)
 	logger.Info("Server shutdown cleanly")
