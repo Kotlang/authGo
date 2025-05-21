@@ -9,6 +9,7 @@ import (
 	"github.com/Kotlang/authGo/service"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/config"
+	"github.com/SaiNageswarS/go-api-boot/dotenv"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/SaiNageswarS/go-api-boot/server"
@@ -18,6 +19,7 @@ import (
 )
 
 func main() {
+	dotenv.LoadEnv()
 	cloudFns := &cloud.Azure{}
 
 	ccfgg := &config.BootConfig{}
@@ -32,7 +34,7 @@ func main() {
 
 	otpClient := &otp.DevOtpClient{}
 
-	boot, err := server.New(ccfgg).
+	boot, err := server.New().
 		GRPCPort(":50051").
 		HTTPPort(":8080").
 		// Dependency injection

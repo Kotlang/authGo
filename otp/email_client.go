@@ -1,6 +1,7 @@
 package otp
 
 import (
+	"context"
 	"regexp"
 	"strings"
 
@@ -32,13 +33,13 @@ func (c *EmailClient) SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db
 		loginInfo.UserType = "member"
 	}
 
-	<-odm.CollectionOf[db.LoginModel](c.mongo, tenant).Save(loginInfo)
+	<-odm.CollectionOf[db.LoginModel](c.mongo, tenant).Save(context.Background(), *loginInfo)
 
 	return loginInfo
 }
 
 func (c *EmailClient) GetLoginInfo(tenant, email string) *db.LoginModel {
-	loginInfo := <-db.FindOneByPhoneOrEmail(c.mongo, tenant, "", email)
+	loginInfo := <-db.FindOneByPhoneOrEmail(context.Background(), c.mongo, tenant, "", email)
 	if loginInfo == nil {
 		loginInfo = &db.LoginModel{
 			Email:    email,

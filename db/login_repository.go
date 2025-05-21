@@ -1,11 +1,11 @@
 package db
 
 import (
-	"github.com/SaiNageswarS/go-api-boot/logger"
+	"context"
+
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.uber.org/zap"
 )
 
 type LoginModel struct {
@@ -31,7 +31,7 @@ func (m LoginModel) Id() string {
 
 func (m LoginModel) CollectionName() string { return "login" }
 
-func FindOneByPhoneOrEmail(mongo odm.MongoClient, tenant, phone, email string) chan *LoginModel {
+func FindOneByPhoneOrEmail(ctx context.Context, mongo odm.MongoClient, tenant, phone, email string) chan *LoginModel {
 	ch := make(chan *LoginModel)
 
 	go func() {
@@ -43,32 +43,25 @@ func FindOneByPhoneOrEmail(mongo odm.MongoClient, tenant, phone, email string) c
 			filter["email"] = email
 		}
 
-		resultChan, errorChan := odm.CollectionOf[LoginModel](mongo, tenant).FindOne(filter)
-
-		select {
-		case res := <-resultChan:
-			ch <- res
-		case err := <-errorChan:
-			logger.Error("Error fetching login info", zap.Error(err))
+		result, error := odm.Await(odm.CollectionOf[LoginModel](mongo, tenant).FindOne(ctx, filter))
+		if error != nil {
 			ch <- nil
+		} else {
+			ch <- result
 		}
 	}()
 	return ch
 }
 
-func FindLoginsByIds(mongo odm.MongoClient, tenant string, ids []string) (chan []LoginModel, chan error) {
-	return odm.CollectionOf[LoginModel](mongo, tenant).Find(bson.M{"_id": bson.M{"$in": ids}}, nil, int64(len(ids)), 0)
+func FindLoginsByIds(ctx context.Context, mongo odm.MongoClient, tenant string, ids []string) <-chan odm.Result[[]LoginModel] {
+	return odm.CollectionOf[LoginModel](mongo, tenant).Find(ctx, bson.M{"_id": bson.M{"$in": ids}}, nil, int64(len(ids)), 0)
 }
 
 func IsAdmin(mongo odm.MongoClient, tenant, id string) bool {
-	loginInfoChan, errResChan := odm.CollectionOf[LoginModel](mongo, tenant).FindOneById(id)
-
-	//get login info using userId
-	select {
-	case loginInfo := <-loginInfoChan:
-		return loginInfo.UserType == "admin"
-	case err := <-errResChan:
-		logger.Error("Error fetching login info", zap.Error(err))
+	loginInfo, err := odm.Await(odm.CollectionOf[LoginModel](mongo, tenant).FindOneByID(context.Background(), id))
+	if err != nil {
 		return false
 	}
+
+	return loginInfo.UserType == "admin"
 }

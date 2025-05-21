@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -37,109 +36,65 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *authPb
 		language = "english"
 	}
 
-	profileMasterListChan, profileMasterListErrorChan := db.FindByLanguage(s.mongo, tenant, language)
-	list := make([]*authPb.ProfileMasterProto, 0)
-
-	select {
-	case profileMasterList := <-profileMasterListChan:
-		copier.CopyWithOption(&list, &profileMasterList, copier.Option{DeepCopy: true})
-		return &authPb.ProfileMasterResponse{
-			ProfileMasterList: list,
-		}, nil
-	case err := <-profileMasterListErrorChan:
+	profileMasterList, err := odm.Await(db.FindByLanguage(ctx, s.mongo, tenant, language))
+	if err != nil {
 		logger.Error("Failed getting profile master list", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profile master list")
 	}
+
+	list := make([]*authPb.ProfileMasterProto, 0)
+	copier.CopyWithOption(&list, &profileMasterList, copier.Option{DeepCopy: true})
+	return &authPb.ProfileMasterResponse{
+		ProfileMasterList: list,
+	}, nil
 }
 
 func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *authPb.GetLanguagesRequest) (*authPb.LanguagesResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
-	distinctLanguagesChan, distinctLanguagesErrorChan := odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Distinct("language", bson.D{}, 2*time.Second)
-	list := make([]string, 0)
-
-	select {
-	case distinctLanguages := <-distinctLanguagesChan:
-		for _, value := range distinctLanguages {
-			res, ok := value.(string)
-			if ok {
-				list = append(list, res)
-			}
-		}
-		return &authPb.LanguagesResponse{
-			Languages: list,
-		}, nil
-	case err := <-distinctLanguagesErrorChan:
+	distinctLanguages, err := odm.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Distinct(ctx, "language", bson.D{}, 2*time.Second))
+	if err != nil {
 		logger.Error("Failed getting distinct languages", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting distinct languages")
 	}
+
+	list := make([]string, 0)
+	for _, value := range distinctLanguages {
+		res, ok := value.(string)
+		if ok {
+			list = append(list, res)
+		}
+	}
+	return &authPb.LanguagesResponse{
+		Languages: list,
+	}, nil
 }
 
 // ADMIN PORTAL API
 func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *authPb.BulkGetProfileMasterRequest) (*authPb.ProfileMasterResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginModelChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
-	select {
-	case loginModel := <-loginModelChan:
-		fmt.Println(loginModel.Phone)
-		if loginModel.UserType != "admin" {
-			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
-		}
-	case err := <-errChan:
+	loginModel, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	if err != nil {
 		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
 	}
 
-	profileMasterListChan, profileMasterListErrorChan := odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Find(bson.M{}, nil, 0, 0)
+	if loginModel.UserType != "admin" {
+		return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
+	}
+
+	profileMasterList, err := odm.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Find(ctx, bson.M{}, nil, 0, 0))
+	if err != nil {
+		logger.Error("Failed getting profile master list", zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting profile master list")
+	}
+
 	list := make([]*authPb.ProfileMasterProto, 0)
-
-	select {
-	case profileMasterList := <-profileMasterListChan:
-		copier.CopyWithOption(&list, &profileMasterList, copier.Option{DeepCopy: true})
-		return &authPb.ProfileMasterResponse{
-			ProfileMasterList: list,
-		}, nil
-	case err := <-profileMasterListErrorChan:
-		logger.Error("Failed bulk getting profile master list", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed bulk getting profile master list")
-	}
-}
-
-// ADMIN PORTAL API
-// Delete Profile Master
-func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *authPb.DeleteProfileMasterRequest) (*authPb.DeleteProfileMasterResponse, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	loginModelChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
-	select {
-	case loginModel := <-loginModelChan:
-		if loginModel.UserType != "admin" {
-			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
-		}
-	case err := <-errChan:
-		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
-	}
-
-	profileMasterChan, errChan := odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).FindOneById(req.Id)
-
-	select {
-	case profileMaster := <-profileMasterChan:
-		err := <-odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).DeleteById(profileMaster.Id())
-
-		if err != nil {
-			logger.Error("Internal error when deleting Profile Master with id: "+req.Id, zap.Error(err))
-			return nil, status.Error(codes.Internal, err.Error())
-		} else {
-			return &authPb.DeleteProfileMasterResponse{
-				Status: "success",
-			}, nil
-		}
-	case err := <-errChan:
-		logger.Error("Profile Master not found", zap.Error(err))
-		return nil, status.Error(codes.NotFound, "Profile Master not found")
-	}
+	copier.CopyWithOption(&list, &profileMasterList, copier.Option{DeepCopy: true})
+	return &authPb.ProfileMasterResponse{
+		ProfileMasterList: list,
+	}, nil
 }
 
 // ADMIN PORTAL API
@@ -147,15 +102,14 @@ func (s *ProfileMasterService) DeleteProfileMaster(ctx context.Context, req *aut
 func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *authPb.AddProfileMasterRequest) (*authPb.ProfileMasterProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginModelChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
-	select {
-	case loginModel := <-loginModelChan:
-		if loginModel.UserType != "admin" {
-			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
-		}
-	case err := <-errChan:
+	loginModel, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	if err != nil {
 		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
+	}
+
+	if loginModel.UserType != "admin" {
+		return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
 	}
 
 	if len(strings.TrimSpace(req.Language)) == 0 {
@@ -165,58 +119,21 @@ func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *authPb
 	profileMaster := &db.ProfileMasterModel{}
 	copier.CopyWithOption(profileMaster, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 
-	err := <-odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Save(profileMaster)
+	_, err = odm.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Save(ctx, *profileMaster))
 
 	if err != nil {
 		logger.Error("Internal error when saving Profile Master with id: "+profileMaster.Id(), zap.Error(err))
 		return nil, status.Error(codes.Internal, err.Error())
 	} else {
-		profileMasterChan, errChan := odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).FindOneById(profileMaster.Id())
-		select {
-		case profileMaster := <-profileMasterChan:
-			profileMasterProto := &authPb.ProfileMasterProto{}
-			copier.Copy(profileMasterProto, profileMaster)
-			return profileMasterProto, nil
-		case err := <-errChan:
-			logger.Error("After saving, the Profile Master not found", zap.Error(err))
-			return nil, status.Error(codes.NotFound, "After saving, the Profile Master not found")
-		}
-	}
-}
+		profileMaster, err = odm.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).FindOneByID(ctx, profileMaster.Id()))
 
-// ADMIN PORTAL API
-// Update Profile Master
-func (s *ProfileMasterService) UpdateProfileMaster(ctx context.Context, req *authPb.ProfileMasterProto) (*authPb.ProfileMasterProto, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	loginModelChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
-	select {
-	case loginModel := <-loginModelChan:
-		if loginModel.UserType != "admin" {
-			return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
-		}
-	case err := <-errChan:
-		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
-	}
-
-	profileMasterChan, errChain := odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).FindOneById(req.Id)
-
-	select {
-	case profileMaster := <-profileMasterChan:
-		copier.CopyWithOption(profileMaster, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
-		profileMaster.Options = req.Options
-		err := <-odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Save(profileMaster)
 		if err != nil {
-			logger.Error("Internal error when saving Profile Master with id: "+profileMaster.Id(), zap.Error(err))
-			return nil, status.Error(codes.Internal, err.Error())
-		} else {
-			profileMasterProto := &authPb.ProfileMasterProto{}
-			copier.Copy(profileMasterProto, profileMaster)
-			return profileMasterProto, nil
+			logger.Error("Failed getting profile master list", zap.Error(err))
+			return nil, status.Error(codes.Internal, "Failed getting profile master list")
 		}
-	case err := <-errChain:
-		logger.Error("Can't update Profile Master not found with id: "+req.Id, zap.Error(err))
-		return nil, status.Error(codes.NotFound, "Can't update Profile Master not found with id: "+req.Id)
+
+		profileMasterProto := &authPb.ProfileMasterProto{}
+		copier.Copy(profileMasterProto, profileMaster)
+		return profileMasterProto, nil
 	}
 }

@@ -1,6 +1,7 @@
 package otp
 
 import (
+	"context"
 	"os"
 	"strings"
 	"unicode"
@@ -45,14 +46,16 @@ func (c *PhoneClient) SaveLoginInfo(tenant string, loginInfo *db.LoginModel) *db
 		loginInfo.UserType = "member"
 	}
 
-	<-odm.CollectionOf[db.LoginModel](c.mongo, tenant).Save(loginInfo)
+	if loginInfo != nil {
+		<-odm.CollectionOf[db.LoginModel](c.mongo, tenant).Save(context.Background(), *loginInfo)
+	}
 
 	return loginInfo
 }
 
 // get login info using phone number
 func (c *PhoneClient) GetLoginInfo(tenant, phone string) *db.LoginModel {
-	loginInfo := <-db.FindOneByPhoneOrEmail(c.mongo, tenant, phone, "")
+	loginInfo := <-db.FindOneByPhoneOrEmail(context.Background(), c.mongo, tenant, phone, "")
 	if loginInfo == nil {
 		loginInfo = &db.LoginModel{
 			Phone:    phone,

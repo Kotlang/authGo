@@ -1,6 +1,8 @@
 package db
 
 import (
+	"context"
+
 	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
@@ -38,16 +40,16 @@ func (m LeadModel) Id() string {
 
 func (m LeadModel) CollectionName() string { return "leads" }
 
-func FindLeadsByIds(mongo odm.MongoClient, tenant string, ids []string) (chan []LeadModel, chan error) {
+func FindLeadsByIds(ctx context.Context, mongo odm.MongoClient, tenant string, ids []string) <-chan odm.Result[[]LeadModel] {
 	filter := bson.M{
 		"_id": bson.M{
 			"$in": ids,
 		},
 	}
-	return odm.CollectionOf[LeadModel](mongo, tenant).Find(filter, nil, 0, 0)
+	return odm.CollectionOf[LeadModel](mongo, tenant).Find(ctx, filter, nil, 0, 0)
 }
 
-func GetLeads(mongo odm.MongoClient, tenant string, leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []LeadModel, totalCount int) {
+func GetLeads(ctx context.Context, mongo odm.MongoClient, tenant string, leadFilters *authPb.LeadFilters, PageSize, PageNumber int64) (leads []LeadModel, totalCount int) {
 
 	// get the filter
 	filter := getLeadFilter(leadFilters)
@@ -61,21 +63,19 @@ func GetLeads(mongo odm.MongoClient, tenant string, leadFilters *authPb.LeadFilt
 	}
 
 	// get the leads
-	resultChan, errChan := odm.CollectionOf[LeadModel](mongo, tenant).Find(filter, sort, PageSize, skip)
-	totalCountResChan, countErrChan := odm.CollectionOf[LeadModel](mongo, tenant).CountDocuments(filter)
+	leadsRes := odm.CollectionOf[LeadModel](mongo, tenant).Find(ctx, filter, sort, PageSize, skip)
+	countRes := odm.CollectionOf[LeadModel](mongo, tenant).Count(ctx, filter)
 	totalCount = 0
 
-	select {
-	case count := <-totalCountResChan:
-		totalCount = int(count)
-	case err := <-countErrChan:
+	count, err := odm.Await(countRes)
+	if err != nil {
 		logger.Error("Error fetching lead count", zap.Error(err))
+	} else {
+		totalCount = int(count)
 	}
 
-	select {
-	case res := <-resultChan:
-		leads = res
-	case err := <-errChan:
+	leads, err = odm.Await(leadsRes)
+	if err != nil {
 		logger.Error("Error fetching leads", zap.Error(err))
 	}
 

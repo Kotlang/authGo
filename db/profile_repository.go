@@ -1,6 +1,8 @@
 package db
 
 import (
+	"context"
+
 	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
@@ -57,16 +59,16 @@ func (m ProfileModel) Id() string {
 
 func (m ProfileModel) CollectionName() string { return "profiles" }
 
-func FindProfilesByIds(mongo odm.MongoClient, tenant string, ids []string) (chan []ProfileModel, chan error) {
+func FindProfilesByIds(ctx context.Context, mongo odm.MongoClient, tenant string, ids []string) <-chan odm.Result[[]ProfileModel] {
 	filter := bson.M{
 		"_id": bson.M{
 			"$in": ids,
 		},
 	}
-	return odm.CollectionOf[ProfileModel](mongo, tenant).Find(filter, nil, int64(len(ids)), 0)
+	return odm.CollectionOf[ProfileModel](mongo, tenant).Find(ctx, filter, nil, int64(len(ids)), 0)
 }
 
-func GetProfiles(mongo odm.MongoClient, tenant string, userfilters *authPb.Userfilters, PageSize, PageNumber int64) (profiles []ProfileModel, totalCount int) {
+func GetProfiles(ctx context.Context, mongo odm.MongoClient, tenant string, userfilters *authPb.Userfilters, PageSize, PageNumber int64) (profiles []ProfileModel, totalCount int) {
 	filters := bson.M{}
 
 	if name := userfilters.Name; name != "" {
@@ -87,22 +89,22 @@ func GetProfiles(mongo odm.MongoClient, tenant string, userfilters *authPb.Userf
 
 	skip := PageNumber * PageSize
 
-	resultChan, errChan := odm.CollectionOf[ProfileModel](mongo, tenant).Find(filters, nil, PageSize, skip)
-	totalCountResChan, countErrChan := odm.CollectionOf[ProfileModel](mongo, tenant).CountDocuments(filters)
+	resultChan := odm.CollectionOf[ProfileModel](mongo, tenant).Find(ctx, filters, nil, PageSize, skip)
+	totalCountResChan := odm.CollectionOf[ProfileModel](mongo, tenant).Count(ctx, filters)
 	totalCount = 0
 
-	select {
-	case count := <-totalCountResChan:
+	count, err := odm.Await(totalCountResChan)
+	if err != nil {
+		logger.Error("Error fetching total count of profiles", zap.Error(err))
+	} else {
 		totalCount = int(count)
-	case err := <-countErrChan:
-		logger.Error("Error fetching user count", zap.Error(err))
 	}
 
-	select {
-	case res := <-resultChan:
-		return res, totalCount
-	case err := <-errChan:
-		logger.Error("Error fetching user IDs", zap.Error(err))
+	profiles, err = odm.Await(resultChan)
+	if err != nil {
+		logger.Error("Error fetching profiles", zap.Error(err))
 		return []ProfileModel{}, totalCount
 	}
+
+	return profiles, totalCount
 }

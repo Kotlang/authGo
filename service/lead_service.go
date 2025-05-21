@@ -37,7 +37,7 @@ func (s *LeadService) CreateLead(ctx context.Context, req *authPb.CreateOrUpdate
 	lead := getLeadModel(req)
 
 	// save to db
-	err := <-odm.CollectionOf[db.LeadModel](s.mongo, tenant).Save(lead)
+	_, err := odm.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).Save(ctx, *lead))
 
 	if err != nil {
 		logger.Error("Error saving lead", zap.Error(err))
@@ -61,15 +61,14 @@ func (s *LeadService) GetLeadById(ctx context.Context, req *authPb.LeadIdRequest
 	}
 
 	// get the lead from db
-	leadResChan, errChan := odm.CollectionOf[db.LeadModel](s.mongo, tenant).FindOneById(req.LeadId)
-	select {
-	case lead := <-leadResChan:
-		leadProto := getLeadProto(lead)
-		return leadProto, nil
-	case err := <-errChan:
+	lead, err := odm.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).FindOneByID(ctx, req.LeadId))
+	if err != nil {
 		logger.Error("Error getting lead", zap.Error(err))
 		return nil, err
 	}
+
+	leadProto := getLeadProto(lead)
+	return leadProto, nil
 }
 
 // Admin only API
@@ -83,19 +82,17 @@ func (s *LeadService) BulkGetLeadsById(ctx context.Context, req *authPb.BulkIdRe
 	}
 
 	// get the leads from db
-	leadResChan, errChan := db.FindLeadsByIds(s.mongo, tenant, req.LeadIds)
-	select {
-	case leads := <-leadResChan:
-		leadProtos := make([]*authPb.LeadProto, len(leads))
-		for i, lead := range leads {
-			leadProtos[i] = getLeadProto(&lead)
-		}
-		return &authPb.LeadListResponse{Leads: leadProtos}, nil
-	case err := <-errChan:
+	leads, err := odm.Await(db.FindLeadsByIds(ctx, s.mongo, tenant, req.LeadIds))
+	if err != nil {
 		logger.Error("Error getting leads", zap.Error(err))
 		return nil, err
-
 	}
+
+	leadProtos := make([]*authPb.LeadProto, len(leads))
+	for i, lead := range leads {
+		leadProtos[i] = getLeadProto(&lead)
+	}
+	return &authPb.LeadListResponse{Leads: leadProtos}, nil
 }
 
 // Admin only API
@@ -112,7 +109,7 @@ func (s *LeadService) UpdateLead(ctx context.Context, req *authPb.CreateOrUpdate
 	lead := getLeadModel(req)
 
 	// save to db
-	err := <-odm.CollectionOf[db.LeadModel](s.mongo, tenant).Save(lead)
+	_, err := odm.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).Save(ctx, *lead))
 
 	if err != nil {
 		logger.Error("Error saving lead", zap.Error(err))
@@ -136,7 +133,7 @@ func (s *LeadService) DeleteLead(ctx context.Context, req *authPb.LeadIdRequest)
 	}
 
 	// delete the lead
-	err := <-odm.CollectionOf[db.LeadModel](s.mongo, tenant).DeleteById(req.LeadId)
+	_, err := odm.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).DeleteByID(ctx, req.LeadId))
 	if err != nil {
 		logger.Error("Error deleting lead", zap.Error(err))
 		return nil, err
@@ -166,7 +163,7 @@ func (s *LeadService) FetchLeads(ctx context.Context, req *authPb.FetchLeadsRequ
 	}
 
 	// get the leads from db
-	leads, totalCount := db.GetLeads(s.mongo, tenant, req.LeadFilters, int64(req.PageSize), int64(req.PageNumber))
+	leads, totalCount := db.GetLeads(ctx, s.mongo, tenant, req.LeadFilters, int64(req.PageSize), int64(req.PageNumber))
 
 	leadProtos := make([]*authPb.LeadProto, len(leads))
 	for i, lead := range leads {

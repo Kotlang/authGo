@@ -52,9 +52,9 @@ func (s *LoginService) Login(ctx context.Context, req *authPb.LoginRequest) (*au
 	isPhone := isPhoneNumber(req.EmailOrPhone)
 	var loginDetails *db.LoginModel
 	if isPhone {
-		loginDetails = <-db.FindOneByPhoneOrEmail(s.mongo, req.Domain, req.EmailOrPhone, "")
+		loginDetails = <-db.FindOneByPhoneOrEmail(ctx, s.mongo, req.Domain, req.EmailOrPhone, "")
 	} else {
-		loginDetails = <-db.FindOneByPhoneOrEmail(s.mongo, req.Domain, "", req.EmailOrPhone)
+		loginDetails = <-db.FindOneByPhoneOrEmail(ctx, s.mongo, req.Domain, "", req.EmailOrPhone)
 	}
 
 	// check if user is blocked, if yes return error
@@ -76,10 +76,11 @@ func (s *LoginService) Login(ctx context.Context, req *authPb.LoginRequest) (*au
 		}
 	}
 
-	// if phone number is excluded from verification, donot send otp and return success
-	phoneNumberToExcludeVerification := os.Getenv("PHONE_NUMBER_TO_EXCLUDE_VERIFICATION")
-	if req.EmailOrPhone == phoneNumberToExcludeVerification {
-		return &authPb.StatusResponse{Status: "success"}, nil
+	if loginDetails == nil {
+		_, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).Save(ctx, db.LoginModel{UserId: req.EmailOrPhone}))
+		if err != nil {
+			logger.Error("Error saving login info", zap.Error(err))
+		}
 	}
 
 	// send otp
@@ -95,7 +96,11 @@ func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
 
-	loginInfo := s.otp.GetLoginInfo(req.Domain, req.EmailOrPhone)
+	loginInfo, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).FindOneByID(ctx, req.EmailOrPhone))
+	if err != nil {
+		logger.Error("Error fetching login info", zap.Error(err))
+		return nil, status.Error(codes.NotFound, "User not found")
+	}
 
 	// if phone number is excluded from verification, donot send otp
 	phoneNumberToExcludeVerification := os.Getenv("PHONE_NUMBER_TO_EXCLUDE_VERIFICATION")
@@ -122,7 +127,7 @@ func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*
 		loginInfo.DeletionInfo.DeletionTime = 0
 
 		// save the login info
-		err := <-odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).Save(loginInfo)
+		_, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).Save(ctx, *loginInfo))
 
 		if err != nil {
 			logger.Error("Error saving login info", zap.Error(err))
@@ -131,12 +136,11 @@ func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*
 
 	// fetch profile for user.
 	profileProto := &authPb.UserProfileProto{}
-	resultChan, errorChan := odm.CollectionOf[db.ProfileModel](s.mongo, req.Domain).FindOneById(loginInfo.Id())
-	select {
-	case profile := <-resultChan:
-		copier.Copy(profileProto, profile)
-	case err := <-errorChan:
+	profile, err := odm.Await(odm.CollectionOf[db.ProfileModel](s.mongo, req.Domain).FindOneByID(ctx, loginInfo.Id()))
+	if err != nil {
 		logger.Error("Error fetching profile", zap.Error(err))
+	} else {
+		copier.Copy(profileProto, profile)
 	}
 
 	// copy login info to profile even if profile is not present.

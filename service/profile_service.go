@@ -48,9 +48,10 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *authPb.
 	}
 
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
+	logger.Info("Creating or updating profile", zap.String("userId", userId), zap.String("tenant", tenant))
 
 	// get existing profile
-	oldProfile := getExistingOrEmptyProfile(s.mongo, tenant, userId)
+	oldProfile, _ := odm.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).FindOneByID(ctx, userId))
 
 	isNewUser := false
 	if oldProfile == nil {
@@ -64,7 +65,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *authPb.
 	oldProfile = getProfileModel(req, oldProfile)
 
 	// save profile to db
-	err = <-odm.CollectionOf[db.ProfileModel](s.mongo, tenant).Save(oldProfile)
+	_, err = odm.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).Save(ctx, *oldProfile))
 
 	// if user is new, register notification event for user created.
 	if isNewUser {
@@ -92,39 +93,23 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *authPb.IdReque
 		userId = req.UserId
 	}
 
-	loginResChan, errChan := odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneById(userId)
-	var login *db.LoginModel
-	select {
-	case login = <-loginResChan:
-		if login.DeletionInfo.MarkedForDeletion && login.UserType != "admin" {
-			return nil, status.Error(codes.PermissionDenied, "Profile Marked for Deletion")
-		}
-
-		if login.IsBlocked && login.UserType != "admin" {
-			return nil, status.Error(codes.PermissionDenied, "User is blocked")
-		}
-	case err := <-errChan:
+	_, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	if err != nil {
 		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
+		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
 	}
 
-	profileResChan, errChan := odm.CollectionOf[db.ProfileModel](s.mongo, tenant).FindOneById(userId)
-	select {
-	case profile := <-profileResChan:
-		profileProto := getProfileProto(profile)
-
-		if login.UserType == "admin" {
-			copier.CopyWithOption(profileProto, login, copier.Option{IgnoreEmpty: true})
-			profileProto.PhoneNumber = login.Phone
-		}
-
-		return profileProto, nil
-	case err := <-errChan:
+	profile, err := odm.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, status.Error(codes.NotFound, "Profile not found")
 		}
 		logger.Error("Failed getting profile", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profile")
 	}
+
+	profileProto := getProfileProto(profile)
+	return profileProto, nil
 }
 
 // BulkGetProfileByIds returns profiles for given user ids.
@@ -133,12 +118,9 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *authPb.Bu
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// login info
-	loginResChan, errChan := db.FindLoginsByIds(s.mongo, tenant, req.UserIds)
-	var loginInfo []db.LoginModel
-	select {
-	case loginInfo = <-loginResChan:
-	case <-errChan:
-		logger.Error("Failed getting login info")
+	loginInfo, err := odm.Await(db.FindLoginsByIds(ctx, s.mongo, tenant, req.UserIds))
+	if err != nil {
+		logger.Error("Failed getting login info", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting login info")
 	}
 
@@ -150,24 +132,20 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *authPb.Bu
 		}
 	}
 
-	profileResChan, profileErrorChan := db.FindProfilesByIds(s.mongo, tenant, userIds)
-
-	select {
-	case profileRes := <-profileResChan:
-		// convert profile model to proto
-		profileProtoList := make([]*authPb.UserProfileProto, 0)
-		for _, profile := range profileRes {
-			profileProtoList = append(profileProtoList, getProfileProto(&profile))
-		}
-
-		return &authPb.ProfileListResponse{
-			Profiles: profileProtoList,
-		}, nil
-
-	case err := <-profileErrorChan:
+	profileRes, err := odm.Await(db.FindProfilesByIds(ctx, s.mongo, tenant, userIds))
+	if err != nil {
 		logger.Error("Failed getting profile", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting profiles")
+		return nil, status.Error(codes.Internal, "Failed getting profile")
 	}
+
+	profileProtoList := make([]*authPb.UserProfileProto, 0)
+	for _, profile := range profileRes {
+		profileProtoList = append(profileProtoList, getProfileProto(&profile))
+	}
+
+	return &authPb.ProfileListResponse{
+		Profiles: profileProtoList,
+	}, nil
 }
 
 // GetProfileImageUploadUrl returns presigned url for uploading profile image.
@@ -251,82 +229,6 @@ func (s *ProfileService) UploadProfileImage(stream authPb.Profile_UploadProfileI
 	}
 }
 
-// Admin only API
-// GetProfileByPhoneOrEmail returns profile using email or phone and is used by admin only.
-func (s *ProfileService) GetProfileByPhoneOrEmail(ctx context.Context, req *authPb.GetProfileByPhoneOrEmailRequest) (*authPb.UserProfileProto, error) {
-	userID, tenant := auth.GetUserIdAndTenant(ctx)
-
-	//validations
-	if req.Email == "" && req.Phone == "" {
-		return nil, status.Error(codes.InvalidArgument, "Email or Phone is required")
-	}
-
-	// Check if user is admin
-	if !db.IsAdmin(s.mongo, tenant, userID) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userID+" don't have permission")
-	}
-
-	// get login info using email or phone
-	loginModel := <-db.FindOneByPhoneOrEmail(s.mongo, tenant, req.Phone, req.Email)
-
-	if loginModel == nil {
-		return nil, status.Error(codes.NotFound, "User not found")
-	}
-
-	profileResChan, errChan := odm.CollectionOf[db.ProfileModel](s.mongo, tenant).FindOneById(loginModel.UserId)
-	select {
-	case profile := <-profileResChan:
-		return getProfileProto(profile), nil
-	case err := <-errChan:
-		if err == mongo.ErrNoDocuments {
-			return nil, status.Error(codes.NotFound, "Profile not found")
-		}
-		logger.Error("Failed getting profile", zap.Error(err))
-		return nil, status.Error(codes.Internal, "Failed getting profile")
-	}
-}
-
-// Admin only API
-// FetchProfiles returns list of profiles based on filters and pagination.
-func (s *ProfileService) FetchProfiles(ctx context.Context, req *authPb.FetchProfilesRequest) (*authPb.ProfileListResponse, error) {
-	userId, tenant := auth.GetUserIdAndTenant(ctx)
-
-	// Check if user is admin
-	if !db.IsAdmin(s.mongo, tenant, userId) {
-		return nil, status.Error(codes.PermissionDenied, "User with id "+userId+" don't have permission")
-	}
-
-	profiles, totalCount := db.GetProfiles(s.mongo, tenant, req.Filters, int64(req.PageSize), int64(req.PageNumber))
-
-	userIds := []string{}
-	for _, profile := range profiles {
-		userIds = append(userIds, profile.UserId)
-	}
-
-	// get login info using userId
-	loginInfoChan, errChan := db.FindLoginsByIds(s.mongo, tenant, userIds)
-
-	userProfileProto := []*authPb.UserProfileProto{}
-	for _, userModel := range profiles {
-		userProfileProto = append(userProfileProto, getProfileProto(&userModel))
-	}
-
-	// populate phone number field in profile proto
-	var loginInfo []db.LoginModel
-	select {
-	case loginInfo = <-loginInfoChan:
-	case <-errChan:
-		logger.Error("Failed getting login info")
-	}
-
-	if len(loginInfo) > 0 {
-		populateLoginInfo(userProfileProto, loginInfo)
-	}
-
-	response := &authPb.ProfileListResponse{Profiles: userProfileProto, TotalUsers: int64(totalCount)}
-	return response, nil
-}
-
 // get profile proto from profile model
 func getProfileProto(profileModel *db.ProfileModel) *authPb.UserProfileProto {
 	result := &authPb.UserProfileProto{}
@@ -400,18 +302,4 @@ func getProfileModel(profileProto *authPb.CreateProfileRequest, profileModel *db
 		profileModel.LandSizeInAcres = value
 	}
 	return profileModel
-}
-
-// gets profile for userId or return empty model if doesn't exist.
-func getExistingOrEmptyProfile(mongo odm.MongoClient, tenant, userId string) *db.ProfileModel {
-	profileResChan, profileErrorChan := odm.CollectionOf[db.ProfileModel](mongo, tenant).FindOneById(userId)
-
-	// in case of error, return empty profile.
-	select {
-	case profileRes := <-profileResChan:
-		return profileRes
-	case <-profileErrorChan:
-		logger.Error("Failed getting profile", zap.String("userId", userId), zap.String("tenant", tenant))
-		return nil
-	}
 }
