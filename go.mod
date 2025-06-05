@@ -3,7 +3,7 @@ module github.com/Kotlang/authGo
 go 1.23.0
 
 require (
-	github.com/SaiNageswarS/go-api-boot v1.0.14
+	github.com/SaiNageswarS/go-api-boot v1.0.15
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/jinzhu/copier v0.3.2
@@ -84,7 +84,6 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
-	golang.org/x/exp v0.0.0-20240213143201-ec583247a57a // indirect
 	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/oauth2 v0.22.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect

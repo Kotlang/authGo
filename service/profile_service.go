@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/Kotlang/authGo/appconfig"
@@ -13,10 +14,10 @@ import (
 	notificationPb "github.com/Kotlang/authGo/generated/notification"
 	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/auth"
-	"github.com/SaiNageswarS/go-api-boot/bootUtils"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
+	"github.com/SaiNageswarS/go-api-boot/server"
 	"github.com/jinzhu/copier"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
@@ -189,36 +190,30 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *auth
 func (s *ProfileService) UploadProfileImage(stream grpc.ClientStreamingServer[authPb.UploadImageRequest, authPb.UploadImageResponse]) error {
 	userId, tenant := auth.GetUserIdAndTenant(stream.Context())
 	logger.Info("Uploading image", zap.String("userId", userId), zap.String("tenant", tenant))
-	acceptableMimeTypes := []string{"image/jpeg", "image/png"}
+	acceptableMimeTypes := map[string]struct{}{
+		"image/jpeg": {},
+		"image/png":  {},
+	}
 
-	imageData, contentType, err := bootUtils.BufferGrpcServerStream(
+	imageData, contentType, err := server.BufferGrpcStream(
+		stream.Context(), // ctx with deadline/cancel
+		stream,           // stream pointer directly
 		acceptableMimeTypes,
-		5*1024*1024, // 5mb max file size.
-		func() ([]byte, error) {
-			err := bootUtils.StreamContextError(stream.Context())
-			if err != nil {
-				return nil, err
-			}
-
-			req, err := stream.Recv()
-			if err != nil {
-				return nil, err
-			}
-			return req.ChunkData, nil
-		})
+		5<<20, // 5 MiB
+	)
 	if err != nil {
 		logger.Error("Failed uploading image", zap.Error(err))
 		return err
 	}
 
-	file_extension := bootUtils.GetFileExtension(contentType)
+	file_extension := strings.Replace(contentType, "image/", "", 1)
 	// upload imageData to Azure bucket.
 	path := fmt.Sprintf("%s/%s/%d.%s", tenant, userId, time.Now().Unix(), file_extension)
 	profileBucket := s.ccfg.ProfileBucket
 	if profileBucket == "" {
 		return status.Error(codes.Internal, "profile_bucket is not set")
 	}
-	uploadPath, err := s.cloudFns.UploadBuffer(stream.Context(), profileBucket, path, imageData.Bytes())
+	uploadPath, err := s.cloudFns.UploadBuffer(stream.Context(), profileBucket, path, imageData)
 
 	if err != nil {
 		logger.Error("Failed uploading image to cloud", zap.Error(err))
