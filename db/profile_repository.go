@@ -4,6 +4,7 @@ import (
 	"context"
 
 	authPb "github.com/Kotlang/authGo/generated/auth"
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"go.mongodb.org/mongo-driver/bson"
@@ -59,7 +60,7 @@ func (m ProfileModel) Id() string {
 
 func (m ProfileModel) CollectionName() string { return "profiles" }
 
-func FindProfilesByIds(ctx context.Context, mongo odm.MongoClient, tenant string, ids []string) <-chan odm.Result[[]ProfileModel] {
+func FindProfilesByIds(ctx context.Context, mongo odm.MongoClient, tenant string, ids []string) <-chan async.Result[[]ProfileModel] {
 	filter := bson.M{
 		"_id": bson.M{
 			"$in": ids,
@@ -93,14 +94,14 @@ func GetProfiles(ctx context.Context, mongo odm.MongoClient, tenant string, user
 	totalCountResChan := odm.CollectionOf[ProfileModel](mongo, tenant).Count(ctx, filters)
 	totalCount = 0
 
-	count, err := odm.Await(totalCountResChan)
+	count, err := async.Await(totalCountResChan)
 	if err != nil {
 		logger.Error("Error fetching total count of profiles", zap.Error(err))
 	} else {
 		totalCount = int(count)
 	}
 
-	profiles, err = odm.Await(resultChan)
+	profiles, err = async.Await(resultChan)
 	if err != nil {
 		logger.Error("Error fetching profiles", zap.Error(err))
 		return []ProfileModel{}, totalCount

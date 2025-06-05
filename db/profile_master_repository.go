@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -20,6 +21,6 @@ func (m ProfileMasterModel) Id() string {
 
 func (m ProfileMasterModel) CollectionName() string { return "profile_master" }
 
-func FindByLanguage(ctx context.Context, mongo odm.MongoClient, tenant string, language string) <-chan odm.Result[[]ProfileMasterModel] {
+func FindByLanguage(ctx context.Context, mongo odm.MongoClient, tenant string, language string) <-chan async.Result[[]ProfileMasterModel] {
 	return odm.CollectionOf[ProfileMasterModel](mongo, tenant).Find(ctx, bson.M{"language": language}, nil, 0, 0)
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	authPb "github.com/Kotlang/authGo/generated/auth"
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
@@ -34,7 +35,7 @@ func (s *LoginVerifiedService) RequestProfileDeletion(ctx context.Context, req *
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// Fetch profile info
-	loginRes, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	loginRes, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
 	if err != nil {
 		logger.Error("Failed getting login", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profile")
@@ -45,7 +46,7 @@ func (s *LoginVerifiedService) RequestProfileDeletion(ctx context.Context, req *
 		DeletionTime:      time.Now().Unix(),
 		Reason:            req.Reason,
 	}
-	_, err = odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(ctx, *loginRes))
+	_, err = async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(ctx, *loginRes))
 
 	return &authPb.StatusResponse{
 		Status: "Profile deletion request sent successfully",
@@ -63,7 +64,7 @@ func (s *LoginVerifiedService) CancelProfileDeletionRequest(ctx context.Context,
 	}
 
 	// Fetch profile info
-	loginRes, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	loginRes, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
 	if err != nil {
 		logger.Error("Failed saving profile deletion request", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed saving profile deletion request")
@@ -74,7 +75,7 @@ func (s *LoginVerifiedService) CancelProfileDeletionRequest(ctx context.Context,
 		DeletionTime:      0,
 		Reason:            "",
 	}
-	odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(ctx, *loginRes))
+	async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(ctx, *loginRes))
 
 	return &authPb.StatusResponse{
 		Status: "Profile deletion request cancelled successfully",
@@ -106,7 +107,7 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 
 	// get total count of pending profile deletion requests
 	totalCount := 0
-	totalCountRes, err := odm.Await(totalCountResChan)
+	totalCountRes, err := async.Await(totalCountResChan)
 	if err != nil {
 		logger.Error("Error fetching total count of pending profile deletion requests", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Error fetching total count of pending profile deletion requests")
@@ -117,7 +118,7 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 	var login []db.LoginModel
 	userIds := []string{}
 
-	login, err = odm.Await(loginResChan)
+	login, err = async.Await(loginResChan)
 	if err != nil {
 		logger.Error("Error fetching login info", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Error fetching login info")
@@ -129,7 +130,7 @@ func (s *LoginVerifiedService) GetPendingProfileDeletionRequests(ctx context.Con
 	}
 
 	// Fetch profiles for pending profile deletion requests
-	profiles, err := odm.Await(db.FindProfilesByIds(ctx, s.mongo, tenant, userIds))
+	profiles, err := async.Await(db.FindProfilesByIds(ctx, s.mongo, tenant, userIds))
 	if err != nil {
 		logger.Error("Error fetching profiles", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Error fetching profiles")
@@ -158,7 +159,7 @@ func (s *LoginVerifiedService) DeleteProfile(ctx context.Context, req *authPb.Id
 	}
 
 	// Check if profile exists
-	isExists, _ := odm.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).Exists(ctx, req.UserId))
+	isExists, _ := async.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).Exists(ctx, req.UserId))
 
 	if !isExists {
 		return &authPb.StatusResponse{
@@ -167,14 +168,14 @@ func (s *LoginVerifiedService) DeleteProfile(ctx context.Context, req *authPb.Id
 	}
 
 	// Delete profile from db
-	_, err := odm.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).DeleteByID(ctx, req.UserId))
+	_, err := async.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).DeleteByID(ctx, req.UserId))
 	if err != nil {
 		logger.Error("Failed deleting profile", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed deleting profile")
 	}
 
 	// Delete login from db
-	_, err = odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).DeleteByID(ctx, req.UserId))
+	_, err = async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).DeleteByID(ctx, req.UserId))
 	if err != nil {
 		logger.Error("Failed deleting login", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed deleting login")
@@ -227,7 +228,7 @@ func (s *LoginVerifiedService) ChangeUserType(ctx context.Context, req *authPb.C
 	loginModel.UserType = req.UserType.String()
 
 	// save login info
-	_, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(ctx, *loginModel))
+	_, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(ctx, *loginModel))
 	if err != nil {
 		logger.Error("Failed changing user type", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed changing user type")
@@ -249,14 +250,14 @@ func (s *LoginVerifiedService) BlockUser(ctx context.Context, req *authPb.IdRequ
 	}
 
 	// fetch login info
-	loginRes, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	loginRes, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
 	if err != nil {
 		logger.Error("Failed getting login", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting login")
 	}
 
 	loginRes.IsBlocked = true
-	_, err = odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(ctx, *loginRes))
+	_, err = async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).Save(ctx, *loginRes))
 	if err != nil {
 		logger.Error("Failed blocking user", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed blocking user")

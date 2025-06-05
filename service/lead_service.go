@@ -5,6 +5,7 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	authPb "github.com/Kotlang/authGo/generated/auth"
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
@@ -37,7 +38,7 @@ func (s *LeadService) CreateLead(ctx context.Context, req *authPb.CreateOrUpdate
 	lead := getLeadModel(req)
 
 	// save to db
-	_, err := odm.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).Save(ctx, *lead))
+	_, err := async.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).Save(ctx, *lead))
 
 	if err != nil {
 		logger.Error("Error saving lead", zap.Error(err))
@@ -61,7 +62,7 @@ func (s *LeadService) GetLeadById(ctx context.Context, req *authPb.LeadIdRequest
 	}
 
 	// get the lead from db
-	lead, err := odm.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).FindOneByID(ctx, req.LeadId))
+	lead, err := async.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).FindOneByID(ctx, req.LeadId))
 	if err != nil {
 		logger.Error("Error getting lead", zap.Error(err))
 		return nil, err
@@ -82,7 +83,7 @@ func (s *LeadService) BulkGetLeadsById(ctx context.Context, req *authPb.BulkIdRe
 	}
 
 	// get the leads from db
-	leads, err := odm.Await(db.FindLeadsByIds(ctx, s.mongo, tenant, req.LeadIds))
+	leads, err := async.Await(db.FindLeadsByIds(ctx, s.mongo, tenant, req.LeadIds))
 	if err != nil {
 		logger.Error("Error getting leads", zap.Error(err))
 		return nil, err
@@ -109,7 +110,7 @@ func (s *LeadService) UpdateLead(ctx context.Context, req *authPb.CreateOrUpdate
 	lead := getLeadModel(req)
 
 	// save to db
-	_, err := odm.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).Save(ctx, *lead))
+	_, err := async.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).Save(ctx, *lead))
 
 	if err != nil {
 		logger.Error("Error saving lead", zap.Error(err))
@@ -133,7 +134,7 @@ func (s *LeadService) DeleteLead(ctx context.Context, req *authPb.LeadIdRequest)
 	}
 
 	// delete the lead
-	_, err := odm.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).DeleteByID(ctx, req.LeadId))
+	_, err := async.Await(odm.CollectionOf[db.LeadModel](s.mongo, tenant).DeleteByID(ctx, req.LeadId))
 	if err != nil {
 		logger.Error("Error deleting lead", zap.Error(err))
 		return nil, err

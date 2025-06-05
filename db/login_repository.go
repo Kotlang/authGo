@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
@@ -43,7 +44,7 @@ func FindOneByPhoneOrEmail(ctx context.Context, mongo odm.MongoClient, tenant, p
 			filter["email"] = email
 		}
 
-		result, error := odm.Await(odm.CollectionOf[LoginModel](mongo, tenant).FindOne(ctx, filter))
+		result, error := async.Await(odm.CollectionOf[LoginModel](mongo, tenant).FindOne(ctx, filter))
 		if error != nil {
 			ch <- nil
 		} else {
@@ -53,12 +54,12 @@ func FindOneByPhoneOrEmail(ctx context.Context, mongo odm.MongoClient, tenant, p
 	return ch
 }
 
-func FindLoginsByIds(ctx context.Context, mongo odm.MongoClient, tenant string, ids []string) <-chan odm.Result[[]LoginModel] {
+func FindLoginsByIds(ctx context.Context, mongo odm.MongoClient, tenant string, ids []string) <-chan async.Result[[]LoginModel] {
 	return odm.CollectionOf[LoginModel](mongo, tenant).Find(ctx, bson.M{"_id": bson.M{"$in": ids}}, nil, int64(len(ids)), 0)
 }
 
 func IsAdmin(mongo odm.MongoClient, tenant, id string) bool {
-	loginInfo, err := odm.Await(odm.CollectionOf[LoginModel](mongo, tenant).FindOneByID(context.Background(), id))
+	loginInfo, err := async.Await(odm.CollectionOf[LoginModel](mongo, tenant).FindOneByID(context.Background(), id))
 	if err != nil {
 		return false
 	}

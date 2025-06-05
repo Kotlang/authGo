@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 
+	"github.com/Kotlang/authGo/appconfig"
 	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/Kotlang/authGo/interceptors"
 	"github.com/Kotlang/authGo/otp"
@@ -22,10 +23,10 @@ func main() {
 	dotenv.LoadEnv()
 	cloudFns := &cloud.Azure{}
 
-	ccfgg := &config.BootConfig{}
+	ccfgg := &appconfig.AppConfig{}
 	config.LoadConfig("config.ini", ccfgg)
 
-	mongoClient, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(ccfgg.MongoUri))
+	mongoClient, err := mongo.Connect(context.Background(), options.Client().ApplyURI(ccfgg.MongoURI))
 	if err != nil {
 		logger.Fatal("Failed to connect to MongoDB", zap.Error(err))
 	}
@@ -45,11 +46,11 @@ func main() {
 		// Custom Interceptors
 		Unary(interceptors.UserExistsAndUpdateLastActiveUnaryInterceptor(mongoClient)).
 		// Register gRPC service impls
-		Register(server.Adapt(authPb.RegisterLoginServer), service.ProvideLoginService).
-		Register(server.Adapt(authPb.RegisterLoginVerifiedServer), service.ProvideLoginVerifiedService).
-		Register(server.Adapt(authPb.RegisterProfileServer), service.ProvideProfileService).
-		Register(server.Adapt(authPb.RegisterProfileMasterServer), service.ProvideProfileMasterService).
-		Register(server.Adapt(authPb.RegisterLeadServiceServer), service.ProvideLeadService).
+		RegisterService(server.Adapt(authPb.RegisterLoginServer), service.ProvideLoginService).
+		RegisterService(server.Adapt(authPb.RegisterLoginVerifiedServer), service.ProvideLoginVerifiedService).
+		RegisterService(server.Adapt(authPb.RegisterProfileServer), service.ProvideProfileService).
+		RegisterService(server.Adapt(authPb.RegisterProfileMasterServer), service.ProvideProfileMasterService).
+		RegisterService(server.Adapt(authPb.RegisterLeadServiceServer), service.ProvideLeadService).
 		Build()
 
 	if err != nil {

@@ -3,35 +3,36 @@ package service
 import (
 	"context"
 	"fmt"
-	"os"
 	"slices"
 	"time"
 
+	"github.com/Kotlang/authGo/appconfig"
 	"github.com/Kotlang/authGo/db"
 	"github.com/Kotlang/authGo/extensions"
 	authPb "github.com/Kotlang/authGo/generated/auth"
 	notificationPb "github.com/Kotlang/authGo/generated/notification"
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/bootUtils"
 	"github.com/SaiNageswarS/go-api-boot/cloud"
-	"github.com/SaiNageswarS/go-api-boot/config"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/jinzhu/copier"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type ProfileService struct {
 	authPb.UnimplementedProfileServer
-	ccfg     *config.BootConfig
+	ccfg     *appconfig.AppConfig
 	mongo    odm.MongoClient
 	cloudFns cloud.Cloud
 }
 
-func ProvideProfileService(mongo odm.MongoClient, cloudFns cloud.Cloud, ccfg *config.BootConfig) *ProfileService {
+func ProvideProfileService(mongo odm.MongoClient, cloudFns cloud.Cloud, ccfg *appconfig.AppConfig) *ProfileService {
 	return &ProfileService{
 		mongo:    mongo,
 		cloudFns: cloudFns,
@@ -51,7 +52,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *authPb.
 	logger.Info("Creating or updating profile", zap.String("userId", userId), zap.String("tenant", tenant))
 
 	// get existing profile
-	oldProfile, _ := odm.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	oldProfile, _ := async.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).FindOneByID(ctx, userId))
 
 	isNewUser := false
 	if oldProfile == nil {
@@ -65,7 +66,7 @@ func (s *ProfileService) CreateOrUpdateProfile(ctx context.Context, req *authPb.
 	oldProfile = getProfileModel(req, oldProfile)
 
 	// save profile to db
-	_, err = odm.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).Save(ctx, *oldProfile))
+	_, err = async.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).Save(ctx, *oldProfile))
 
 	// if user is new, register notification event for user created.
 	if isNewUser {
@@ -93,13 +94,13 @@ func (s *ProfileService) GetProfileById(ctx context.Context, req *authPb.IdReque
 		userId = req.UserId
 	}
 
-	_, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	_, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
 	if err != nil {
 		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
 	}
 
-	profile, err := odm.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	profile, err := async.Await(odm.CollectionOf[db.ProfileModel](s.mongo, tenant).FindOneByID(ctx, userId))
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, status.Error(codes.NotFound, "Profile not found")
@@ -118,7 +119,7 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *authPb.Bu
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
 	// login info
-	loginInfo, err := odm.Await(db.FindLoginsByIds(ctx, s.mongo, tenant, req.UserIds))
+	loginInfo, err := async.Await(db.FindLoginsByIds(ctx, s.mongo, tenant, req.UserIds))
 	if err != nil {
 		logger.Error("Failed getting login info", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting login info")
@@ -132,7 +133,7 @@ func (s *ProfileService) BulkGetProfileByIds(ctx context.Context, req *authPb.Bu
 		}
 	}
 
-	profileRes, err := odm.Await(db.FindProfilesByIds(ctx, s.mongo, tenant, userIds))
+	profileRes, err := async.Await(db.FindProfilesByIds(ctx, s.mongo, tenant, userIds))
 	if err != nil {
 		logger.Error("Failed getting profile", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profile")
@@ -171,12 +172,12 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *auth
 	}
 	contentType := fmt.Sprintf("image/%s", req.MediaExtension)
 	key := fmt.Sprintf("%s/%s/%d.%s", tenant, userId, time.Now().Unix(), req.MediaExtension)
-	profileBucket := os.Getenv("profile_bucket")
+	profileBucket := s.ccfg.ProfileBucket
 	if profileBucket == "" {
 		return nil, status.Error(codes.Internal, "profile_bucket is not set")
 	}
 
-	preSignedUrl, downloadUrl := s.cloudFns.GetPresignedUrl(s.ccfg, profileBucket, key, contentType, 10*time.Minute)
+	preSignedUrl, downloadUrl := s.cloudFns.GetPresignedUrl(ctx, profileBucket, key, contentType, 10*time.Minute)
 	return &authPb.ProfileImageUploadURL{
 		UploadUrl:    preSignedUrl,
 		MediaUrl:     downloadUrl,
@@ -185,7 +186,7 @@ func (s *ProfileService) GetProfileImageUploadUrl(ctx context.Context, req *auth
 }
 
 // UploadProfileImage uploads profile image to cloud bucket with max size of 5mb.
-func (s *ProfileService) UploadProfileImage(stream authPb.Profile_UploadProfileImageServer) error {
+func (s *ProfileService) UploadProfileImage(stream grpc.ClientStreamingServer[authPb.UploadImageRequest, authPb.UploadImageResponse]) error {
 	userId, tenant := auth.GetUserIdAndTenant(stream.Context())
 	logger.Info("Uploading image", zap.String("userId", userId), zap.String("tenant", tenant))
 	acceptableMimeTypes := []string{"image/jpeg", "image/png"}
@@ -213,20 +214,19 @@ func (s *ProfileService) UploadProfileImage(stream authPb.Profile_UploadProfileI
 	file_extension := bootUtils.GetFileExtension(contentType)
 	// upload imageData to Azure bucket.
 	path := fmt.Sprintf("%s/%s/%d.%s", tenant, userId, time.Now().Unix(), file_extension)
-	profileBucket := os.Getenv("profile_bucket")
+	profileBucket := s.ccfg.ProfileBucket
 	if profileBucket == "" {
 		return status.Error(codes.Internal, "profile_bucket is not set")
 	}
-	resultChan, errorChan := s.cloudFns.UploadStream(s.ccfg, profileBucket, path, imageData.Bytes())
+	uploadPath, err := s.cloudFns.UploadBuffer(stream.Context(), profileBucket, path, imageData.Bytes())
 
-	select {
-	case result := <-resultChan:
-		stream.SendAndClose(&authPb.UploadImageResponse{UploadPath: result})
-		return nil
-	case err := <-errorChan:
-		logger.Error("Failed uploading image", zap.Error(err))
+	if err != nil {
+		logger.Error("Failed uploading image to cloud", zap.Error(err))
 		return err
 	}
+
+	stream.SendAndClose(&authPb.UploadImageResponse{UploadPath: uploadPath})
+	return nil
 }
 
 // get profile proto from profile model

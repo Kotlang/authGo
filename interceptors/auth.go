@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Kotlang/authGo/db"
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
@@ -33,7 +34,7 @@ func UserExistsAndUpdateLastActiveUnaryInterceptor(mongo odm.MongoClient) grpc.U
 		}
 
 		userId, tenant := auth.GetUserIdAndTenant(ctx)
-		login, err := odm.Await(odm.CollectionOf[db.LoginModel](mongo, tenant).FindOneByID(ctx, userId))
+		login, err := async.Await(odm.CollectionOf[db.LoginModel](mongo, tenant).FindOneByID(ctx, userId))
 		if err != nil {
 			logger.Error("User not found", zap.String("userId", userId), zap.Error(err))
 		} else {
@@ -42,7 +43,7 @@ func UserExistsAndUpdateLastActiveUnaryInterceptor(mongo odm.MongoClient) grpc.U
 			}
 
 			login.LastActive = time.Now().Unix()
-			_, err = odm.Await(odm.CollectionOf[db.LoginModel](mongo, tenant).Save(ctx, *login))
+			_, err = async.Await(odm.CollectionOf[db.LoginModel](mongo, tenant).Save(ctx, *login))
 			if err != nil {
 				logger.Error("Error updating last active time", zap.String("userId", userId), zap.Error(err))
 			}

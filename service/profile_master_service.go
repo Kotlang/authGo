@@ -7,6 +7,7 @@ import (
 
 	"github.com/Kotlang/authGo/db"
 	authPb "github.com/Kotlang/authGo/generated/auth"
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
@@ -36,7 +37,7 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *authPb
 		language = "english"
 	}
 
-	profileMasterList, err := odm.Await(db.FindByLanguage(ctx, s.mongo, tenant, language))
+	profileMasterList, err := async.Await(db.FindByLanguage(ctx, s.mongo, tenant, language))
 	if err != nil {
 		logger.Error("Failed getting profile master list", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profile master list")
@@ -52,7 +53,7 @@ func (s *ProfileMasterService) GetProfileMaster(ctx context.Context, req *authPb
 func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *authPb.GetLanguagesRequest) (*authPb.LanguagesResponse, error) {
 	_, tenant := auth.GetUserIdAndTenant(ctx)
 
-	distinctLanguages, err := odm.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Distinct(ctx, "language", bson.D{}, 2*time.Second))
+	distinctLanguages, err := async.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Distinct(ctx, "language", bson.D{}, 2*time.Second))
 	if err != nil {
 		logger.Error("Failed getting distinct languages", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting distinct languages")
@@ -74,7 +75,7 @@ func (s *ProfileMasterService) GetLanguages(ctx context.Context, req *authPb.Get
 func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *authPb.BulkGetProfileMasterRequest) (*authPb.ProfileMasterResponse, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginModel, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	loginModel, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
 	if err != nil {
 		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
@@ -84,7 +85,7 @@ func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *au
 		return nil, status.Error(codes.PermissionDenied, "User with id"+userId+" don't have permission")
 	}
 
-	profileMasterList, err := odm.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Find(ctx, bson.M{}, nil, 0, 0))
+	profileMasterList, err := async.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Find(ctx, bson.M{}, nil, 0, 0))
 	if err != nil {
 		logger.Error("Failed getting profile master list", zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting profile master list")
@@ -102,7 +103,7 @@ func (s *ProfileMasterService) BulkGetProfileMaster(ctx context.Context, req *au
 func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *authPb.AddProfileMasterRequest) (*authPb.ProfileMasterProto, error) {
 	userId, tenant := auth.GetUserIdAndTenant(ctx)
 
-	loginModel, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
+	loginModel, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, tenant).FindOneByID(ctx, userId))
 	if err != nil {
 		logger.Error("Failed getting login info using id: "+userId, zap.Error(err))
 		return nil, status.Error(codes.Internal, "Failed getting login info using id: "+userId)
@@ -119,13 +120,13 @@ func (s *ProfileMasterService) AddProfileMaster(ctx context.Context, req *authPb
 	profileMaster := &db.ProfileMasterModel{}
 	copier.CopyWithOption(profileMaster, req, copier.Option{IgnoreEmpty: true, DeepCopy: true})
 
-	_, err = odm.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Save(ctx, *profileMaster))
+	_, err = async.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).Save(ctx, *profileMaster))
 
 	if err != nil {
 		logger.Error("Internal error when saving Profile Master with id: "+profileMaster.Id(), zap.Error(err))
 		return nil, status.Error(codes.Internal, err.Error())
 	} else {
-		profileMaster, err = odm.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).FindOneByID(ctx, profileMaster.Id()))
+		profileMaster, err = async.Await(odm.CollectionOf[db.ProfileMasterModel](s.mongo, tenant).FindOneByID(ctx, profileMaster.Id()))
 
 		if err != nil {
 			logger.Error("Failed getting profile master list", zap.Error(err))

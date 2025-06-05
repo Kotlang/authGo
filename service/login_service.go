@@ -8,6 +8,7 @@ import (
 	"github.com/Kotlang/authGo/db"
 	authPb "github.com/Kotlang/authGo/generated/auth"
 	"github.com/Kotlang/authGo/otp"
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/auth"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
@@ -77,7 +78,7 @@ func (s *LoginService) Login(ctx context.Context, req *authPb.LoginRequest) (*au
 	}
 
 	if loginDetails == nil {
-		_, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).Save(ctx, db.LoginModel{UserId: req.EmailOrPhone}))
+		_, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).Save(ctx, db.LoginModel{UserId: req.EmailOrPhone}))
 		if err != nil {
 			logger.Error("Error saving login info", zap.Error(err))
 		}
@@ -96,7 +97,7 @@ func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*
 		return nil, status.Error(codes.InvalidArgument, "Invalid Domain Token")
 	}
 
-	loginInfo, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).FindOneByID(ctx, req.EmailOrPhone))
+	loginInfo, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).FindOneByID(ctx, req.EmailOrPhone))
 	if err != nil {
 		logger.Error("Error fetching login info", zap.Error(err))
 		return nil, status.Error(codes.NotFound, "User not found")
@@ -127,7 +128,7 @@ func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*
 		loginInfo.DeletionInfo.DeletionTime = 0
 
 		// save the login info
-		_, err := odm.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).Save(ctx, *loginInfo))
+		_, err := async.Await(odm.CollectionOf[db.LoginModel](s.mongo, req.Domain).Save(ctx, *loginInfo))
 
 		if err != nil {
 			logger.Error("Error saving login info", zap.Error(err))
@@ -136,7 +137,7 @@ func (s *LoginService) Verify(ctx context.Context, req *authPb.VerifyRequest) (*
 
 	// fetch profile for user.
 	profileProto := &authPb.UserProfileProto{}
-	profile, err := odm.Await(odm.CollectionOf[db.ProfileModel](s.mongo, req.Domain).FindOneByID(ctx, loginInfo.Id()))
+	profile, err := async.Await(odm.CollectionOf[db.ProfileModel](s.mongo, req.Domain).FindOneByID(ctx, loginInfo.Id()))
 	if err != nil {
 		logger.Error("Error fetching profile", zap.Error(err))
 	} else {

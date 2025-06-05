@@ -4,6 +4,7 @@ import (
 	"context"
 
 	authPb "github.com/Kotlang/authGo/generated/auth"
+	"github.com/SaiNageswarS/go-api-boot/async"
 	"github.com/SaiNageswarS/go-api-boot/logger"
 	"github.com/SaiNageswarS/go-api-boot/odm"
 	"github.com/google/uuid"
@@ -40,7 +41,7 @@ func (m LeadModel) Id() string {
 
 func (m LeadModel) CollectionName() string { return "leads" }
 
-func FindLeadsByIds(ctx context.Context, mongo odm.MongoClient, tenant string, ids []string) <-chan odm.Result[[]LeadModel] {
+func FindLeadsByIds(ctx context.Context, mongo odm.MongoClient, tenant string, ids []string) <-chan async.Result[[]LeadModel] {
 	filter := bson.M{
 		"_id": bson.M{
 			"$in": ids,
@@ -67,14 +68,14 @@ func GetLeads(ctx context.Context, mongo odm.MongoClient, tenant string, leadFil
 	countRes := odm.CollectionOf[LeadModel](mongo, tenant).Count(ctx, filter)
 	totalCount = 0
 
-	count, err := odm.Await(countRes)
+	count, err := async.Await(countRes)
 	if err != nil {
 		logger.Error("Error fetching lead count", zap.Error(err))
 	} else {
 		totalCount = int(count)
 	}
 
-	leads, err = odm.Await(leadsRes)
+	leads, err = async.Await(leadsRes)
 	if err != nil {
 		logger.Error("Error fetching leads", zap.Error(err))
 	}
